@@ -1,9 +1,9 @@
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup
 
-from database import get_connection, now_iso
+from database import dict_cursor, get_connection
 from keyboards.main import main_menu_kb, skip_comment_kb
 
 router = Router()
@@ -28,7 +28,12 @@ def transaction_type_kb() -> ReplyKeyboardMarkup:
 @router.message(F.text == "➕ Добавить операцию")
 async def add_transaction_start(message: Message, state: FSMContext):
     with get_connection() as conn:
-        participants = conn.execute("SELECT id, name FROM participants ORDER BY id").fetchall()
+        cur = dict_cursor(conn)
+        try:
+            cur.execute("SELECT id, name FROM participants ORDER BY id")
+            participants = cur.fetchall()
+        finally:
+            cur.close()
     if not participants:
         await message.answer("Сначала добавьте участников в разделе «👥 Участники».", reply_markup=main_menu_kb())
         return
@@ -47,7 +52,12 @@ async def transaction_choose_participant(message: Message, state: FSMContext):
         await message.answer("Введите корректный ID участника.")
         return
     with get_connection() as conn:
-        row = conn.execute("SELECT id FROM participants WHERE id = ?", (participant_id,)).fetchone()
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT id FROM participants WHERE id = %s", (participant_id,))
+            row = cur.fetchone()
+        finally:
+            cur.close()
     if not row:
         await message.answer("Участник не найден. Введите ID ещё раз.")
         return
@@ -99,19 +109,22 @@ async def transaction_comment(message: Message, state: FSMContext):
     data = await state.get_data()
     comment = None if message.text == "Пропустить" else message.text.strip()
     with get_connection() as conn:
-        conn.execute(
-            """
-            INSERT INTO transactions(participant_id, type, amount, category, comment, created_at)
-            VALUES(?, ?, ?, ?, ?, ?)
-            """,
-            (
-                data["participant_id"],
-                data["type"],
-                data["amount"],
-                data["category"],
-                comment,
-                now_iso(),
-            ),
-        )
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                """
+                INSERT INTO transactions(participant_id, type, amount, category, comment)
+                VALUES(%s, %s, %s, %s, %s)
+                """,
+                (
+                    data["participant_id"],
+                    data["type"],
+                    data["amount"],
+                    data["category"],
+                    comment,
+                ),
+            )
+        finally:
+            cur.close()
     await state.clear()
     await message.answer("Операция сохранена ✅", reply_markup=main_menu_kb())

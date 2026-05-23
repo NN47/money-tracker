@@ -3,7 +3,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
-from database import get_connection, now_iso
+from database import dict_cursor, get_connection
 from keyboards.main import main_menu_kb, participants_menu_kb
 
 router = Router()
@@ -33,10 +33,11 @@ async def add_participant_finish(message: Message, state: FSMContext):
         await message.answer("Имя не может быть пустым. Введите снова:")
         return
     with get_connection() as conn:
-        conn.execute(
-            "INSERT INTO participants(name, created_at) VALUES(?, ?)",
-            (name, now_iso()),
-        )
+        cur = conn.cursor()
+        try:
+            cur.execute("INSERT INTO participants(name) VALUES(%s)", (name,))
+        finally:
+            cur.close()
     await state.clear()
     await message.answer(f"Участник «{name}» добавлен.", reply_markup=participants_menu_kb())
 
@@ -44,7 +45,12 @@ async def add_participant_finish(message: Message, state: FSMContext):
 @router.message(F.text == "📋 Список")
 async def list_participants(message: Message):
     with get_connection() as conn:
-        rows = conn.execute("SELECT id, name FROM participants ORDER BY id").fetchall()
+        cur = dict_cursor(conn)
+        try:
+            cur.execute("SELECT id, name FROM participants ORDER BY id")
+            rows = cur.fetchall()
+        finally:
+            cur.close()
     if not rows:
         await message.answer("Список участников пуст.")
         return
@@ -55,7 +61,12 @@ async def list_participants(message: Message):
 @router.message(F.text == "❌ Удалить")
 async def delete_participant_start(message: Message, state: FSMContext):
     with get_connection() as conn:
-        rows = conn.execute("SELECT id, name FROM participants ORDER BY id").fetchall()
+        cur = dict_cursor(conn)
+        try:
+            cur.execute("SELECT id, name FROM participants ORDER BY id")
+            rows = cur.fetchall()
+        finally:
+            cur.close()
     if not rows:
         await message.answer("Удалять пока некого.")
         return
@@ -74,9 +85,14 @@ async def delete_participant_finish(message: Message, state: FSMContext):
         await message.answer("Введите корректный числовой ID.")
         return
     with get_connection() as conn:
-        cur = conn.execute("DELETE FROM participants WHERE id = ?", (participant_id,))
+        cur = conn.cursor()
+        try:
+            cur.execute("DELETE FROM participants WHERE id = %s", (participant_id,))
+            rowcount = cur.rowcount
+        finally:
+            cur.close()
     await state.clear()
-    if cur.rowcount:
+    if rowcount:
         await message.answer("Участник удалён.", reply_markup=participants_menu_kb())
     else:
         await message.answer("Участник с таким ID не найден.", reply_markup=participants_menu_kb())

@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
-from database import get_connection
+from database import dict_cursor, get_connection
 from keyboards.main import payments_menu_kb
 
 router = Router()
@@ -27,7 +27,12 @@ async def payments_menu(message: Message, state: FSMContext):
 @router.message(F.text == "➕ Добавить платёж")
 async def payment_start(message: Message, state: FSMContext):
     with get_connection() as conn:
-        participants = conn.execute("SELECT id, name FROM participants ORDER BY id").fetchall()
+        cur = dict_cursor(conn)
+        try:
+            cur.execute("SELECT id, name FROM participants ORDER BY id")
+            participants = cur.fetchall()
+        finally:
+            cur.close()
     if not participants:
         await message.answer("Сначала добавьте участников в разделе «👥 Участники».")
         return
@@ -46,7 +51,12 @@ async def payment_participant(message: Message, state: FSMContext):
         await message.answer("Введите корректный ID.")
         return
     with get_connection() as conn:
-        row = conn.execute("SELECT id FROM participants WHERE id = ?", (participant_id,)).fetchone()
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT id FROM participants WHERE id = %s", (participant_id,))
+            row = cur.fetchone()
+        finally:
+            cur.close()
     if not row:
         await message.answer("Участник не найден. Повторите ввод ID.")
         return
@@ -92,13 +102,17 @@ async def payment_due_date(message: Message, state: FSMContext):
     data = await state.get_data()
     due_date = due_dt.strftime("%Y-%m-%d")
     with get_connection() as conn:
-        conn.execute(
-            """
-            INSERT INTO payments(participant_id, title, amount, due_date, is_paid)
-            VALUES(?, ?, ?, ?, 0)
-            """,
-            (data["participant_id"], data["title"], data["amount"], due_date),
-        )
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                """
+                INSERT INTO payments(participant_id, title, amount, due_date, is_paid)
+                VALUES(%s, %s, %s, %s, FALSE)
+                """,
+                (data["participant_id"], data["title"], data["amount"], due_date),
+            )
+        finally:
+            cur.close()
     await state.clear()
     await message.answer("Платёж добавлен ✅", reply_markup=payments_menu_kb())
 
@@ -106,22 +120,27 @@ async def payment_due_date(message: Message, state: FSMContext):
 @router.message(F.text == "📅 Ближайшие")
 async def nearest_payments(message: Message):
     with get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT p.title, p.amount, p.due_date, pt.name as participant_name
-            FROM payments p
-            LEFT JOIN participants pt ON pt.id = p.participant_id
-            WHERE p.is_paid = 0
-            ORDER BY p.due_date ASC
-            LIMIT 10
-            """
-        ).fetchall()
+        cur = dict_cursor(conn)
+        try:
+            cur.execute(
+                """
+                SELECT p.title, p.amount, p.due_date, pt.name as participant_name
+                FROM payments p
+                LEFT JOIN participants pt ON pt.id = p.participant_id
+                WHERE p.is_paid = FALSE
+                ORDER BY p.due_date ASC
+                LIMIT 10
+                """
+            )
+            rows = cur.fetchall()
+        finally:
+            cur.close()
     if not rows:
         await message.answer("Ближайших платежей нет.")
         return
 
     lines = ["💳 Ближайшие платежи:"]
     for row in rows:
-        due = datetime.strptime(row["due_date"], "%Y-%m-%d").strftime("%d.%m")
-        lines.append(f"{due} — {row['title']} ({row['amount']:.2f} ₽), {row['participant_name']}")
+        due = row["due_date"].strftime("%d.%m")
+        lines.append(f"{due} — {row['title']} ({float(row['amount']):.2f} ₽), {row['participant_name']}")
     await message.answer("\n".join(lines))

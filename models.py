@@ -27,4 +27,4 @@ class Payment:
     title: str
     amount: float
     due_date: str
-    is_paid: int
+    is_paid: bool
