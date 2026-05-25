@@ -4,7 +4,10 @@ from database import dict_cursor, get_connection
 
 
 def money(value: float) -> str:
-    return f"{value:,.2f}".replace(",", " ")
+    formatted = f"{value:,.2f}".replace(",", " ")
+    if formatted.endswith(".00"):
+        return formatted[:-3]
+    return formatted.rstrip("0").rstrip(".")
 
 
 def month_bounds(today: date):
