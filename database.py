@@ -1,8 +1,11 @@
+import logging
 import os
 from contextlib import contextmanager
 
 import psycopg2
 import psycopg2.extras
+
+logger = logging.getLogger(__name__)
 
 
 def _get_database_url() -> str:
@@ -71,6 +74,28 @@ def init_db() -> None:
                 )
                 """
             )
+
+            cur.execute(
+                """
+                ALTER TABLE IF EXISTS transactions
+                ADD COLUMN IF NOT EXISTS operation_date DATE
+                """
+            )
+            cur.execute(
+                """
+                UPDATE transactions
+                SET operation_date = created_at::date
+                WHERE operation_date IS NULL
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE IF EXISTS transactions
+                ALTER COLUMN operation_date
+                SET NOT NULL
+                """
+            )
+            logger.info("Database migration completed")
         finally:
             cur.close()
 
