@@ -8,7 +8,7 @@ from aiogram.types import Update
 from dotenv import load_dotenv
 
 from database import init_db
-from handlers import participants, payments, report, start, transactions
+from handlers import payments, report, start, transactions
 
 
 async def healthcheck(_: web.Request) -> web.Response:
@@ -55,7 +55,6 @@ async def main() -> None:
     dp = Dispatcher()
 
     dp.include_router(start.router)
-    dp.include_router(participants.router)
     dp.include_router(transactions.router)
     dp.include_router(payments.router)
     dp.include_router(report.router)

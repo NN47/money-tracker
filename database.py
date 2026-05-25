@@ -31,21 +31,25 @@ def init_db() -> None:
         try:
             cur.execute(
                 """
-                CREATE TABLE IF NOT EXISTS participants (
+                CREATE TABLE IF NOT EXISTS transactions (
                     id SERIAL PRIMARY KEY,
-                    name TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    amount NUMERIC(12,2) NOT NULL,
+                    category TEXT,
+                    comment TEXT,
+                    operation_date DATE NOT NULL DEFAULT CURRENT_DATE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
                 """
             )
             cur.execute(
                 """
-                CREATE TABLE IF NOT EXISTS transactions (
+                CREATE TABLE IF NOT EXISTS scheduled_payments (
                     id SERIAL PRIMARY KEY,
-                    participant_id INTEGER REFERENCES participants(id) ON DELETE CASCADE,
-                    type TEXT NOT NULL,
+                    title TEXT NOT NULL,
                     amount NUMERIC(12,2) NOT NULL,
-                    category TEXT,
+                    payment_date DATE NOT NULL,
+                    is_paid BOOLEAN DEFAULT FALSE,
                     comment TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -53,13 +57,16 @@ def init_db() -> None:
             )
             cur.execute(
                 """
-                CREATE TABLE IF NOT EXISTS payments (
+                CREATE TABLE IF NOT EXISTS recurring_operations (
                     id SERIAL PRIMARY KEY,
-                    participant_id INTEGER REFERENCES participants(id) ON DELETE CASCADE,
                     title TEXT NOT NULL,
+                    type TEXT NOT NULL,
                     amount NUMERIC(12,2) NOT NULL,
-                    due_date DATE NOT NULL,
-                    is_paid BOOLEAN DEFAULT FALSE,
+                    category TEXT,
+                    day_of_month INTEGER,
+                    frequency TEXT NOT NULL DEFAULT 'monthly',
+                    is_active BOOLEAN DEFAULT TRUE,
+                    comment TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
                 """

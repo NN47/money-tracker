@@ -1,65 +1,84 @@
+from datetime import date, timedelta
+
 from database import dict_cursor, get_connection
 
 
-def build_summary_report() -> str:
+def money(value: float) -> str:
+    return f"{value:,.2f}".replace(",", " ")
+
+
+def month_bounds(today: date):
+    start = today.replace(day=1)
+    if start.month == 12:
+        nxt = start.replace(year=start.year + 1, month=1)
+    else:
+        nxt = start.replace(month=start.month + 1)
+    return start, nxt
+
+
+def _fetch_main_data():
+    today = date.today()
+    start, nxt = month_bounds(today)
+    horizon = today + timedelta(days=30)
     with get_connection() as conn:
         cur = dict_cursor(conn)
-        try:
-            cur.execute("SELECT COALESCE(SUM(amount), 0) AS total FROM transactions WHERE type = 'income'")
-            income = float(cur.fetchone()["total"])
-            cur.execute("SELECT COALESCE(SUM(amount), 0) AS total FROM transactions WHERE type = 'expense'")
-            expense = float(cur.fetchone()["total"])
-            cur.execute(
-                """
-                SELECT p.name, COALESCE(SUM(CASE WHEN t.type='income' THEN t.amount ELSE -t.amount END), 0) as balance
-                FROM participants p
-                LEFT JOIN transactions t ON t.participant_id = p.id
-                GROUP BY p.id, p.name
-                ORDER BY p.id
-                """
-            )
-            participants = cur.fetchall()
-            cur.execute(
-                """
-                SELECT title, due_date
-                FROM payments
-                WHERE is_paid = FALSE
-                ORDER BY due_date ASC
-                LIMIT 5
-                """
-            )
-            payments = cur.fetchall()
-        finally:
-            cur.close()
+        cur.execute("SELECT COALESCE(SUM(amount),0) total FROM transactions WHERE type='income' AND operation_date >= %s AND operation_date < %s", (start, nxt))
+        income = float(cur.fetchone()["total"])
+        cur.execute("SELECT COALESCE(SUM(amount),0) total FROM transactions WHERE type='expense' AND operation_date >= %s AND operation_date < %s", (start, nxt))
+        expense = float(cur.fetchone()["total"])
+        cur.execute("SELECT id, title, amount, payment_date FROM scheduled_payments WHERE is_paid=FALSE AND payment_date BETWEEN %s AND %s ORDER BY payment_date LIMIT 10", (today, horizon))
+        payments = cur.fetchall()
+        cur.execute("SELECT title, amount, day_of_month FROM recurring_operations WHERE is_active=TRUE ORDER BY day_of_month, id LIMIT 10")
+        recurring = cur.fetchall()
+        cur.close()
+    return today, income, expense, payments, recurring
 
+
+def build_dashboard() -> str:
+    today, income, expense, payments, recurring = _fetch_main_data()
     balance = income - expense
     lines = [
-        "📊 Общий отчёт",
+        "💼 Главный экран",
         "",
-        "Доходы:",
-        f"{income:.2f} ₽",
+        f"📊 {today.strftime('%B %Y').capitalize()}",
+        f"Доходы: {money(income)} ₽",
+        f"Расходы: {money(expense)} ₽",
+        f"Баланс: {money(balance)} ₽",
         "",
-        "Расходы:",
-        f"{expense:.2f} ₽",
-        "",
-        "Баланс:",
-        f"{balance:.2f} ₽",
-        "",
-        "По участникам:",
+        "📅 Ближайшие платежи:",
     ]
-
-    if participants:
-        lines.extend([f"{row['name']} — {float(row['balance']):.2f} ₽" for row in participants])
-    else:
-        lines.append("Нет данных")
-
-    lines.append("")
-    lines.append("Ближайшие платежи:")
     if payments:
-        for row in payments:
-            due = row["due_date"].strftime("%d.%m")
-            lines.append(f"{due} — {row['title']}")
+        lines.extend([f"{r['payment_date'].strftime('%d.%m')} — {r['title']} — {money(float(r['amount']))} ₽" for r in payments])
     else:
-        lines.append("Нет ближайших платежей")
+        lines.append("Нет неоплаченных платежей на 30 дней")
+    lines.append("")
+    lines.append("🔁 Постоянные операции:")
+    if recurring:
+        lines.extend([f"{r['day_of_month']} число — {r['title']} — {money(float(r['amount']))} ₽" for r in recurring])
+    else:
+        lines.append("Нет активных постоянных операций")
+    return "\n".join(lines)
 
+
+def build_summary_report() -> str:
+    today, income, expense, payments, _ = _fetch_main_data()
+    balance = income - expense
+    with get_connection() as conn:
+        cur = dict_cursor(conn)
+        cur.execute("SELECT type, amount, category, operation_date FROM transactions ORDER BY operation_date DESC, id DESC LIMIT 10")
+        tx = cur.fetchall()
+        cur.close()
+    lines = ["📊 Отчёт", "", f"Период: {today.strftime('%m.%Y')}", f"Доходы: {money(income)} ₽", f"Расходы: {money(expense)} ₽", f"Баланс: {money(balance)} ₽", "", "Последние 10 операций:"]
+    if tx:
+        for row in tx:
+            sign = "+" if row["type"] == "income" else "-"
+            lines.append(f"{row['operation_date'].strftime('%d.%m')} {sign}{money(float(row['amount']))} ₽ — {row['category']}")
+    else:
+        lines.append("Операций пока нет")
+    lines.append("")
+    lines.append("Ближайшие 10 платежей:")
+    if payments:
+        lines.extend([f"{r['payment_date'].strftime('%d.%m')} — {r['title']} — {money(float(r['amount']))} ₽" for r in payments[:10]])
+    else:
+        lines.append("Нет неоплаченных платежей")
     return "\n".join(lines)
