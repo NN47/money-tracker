@@ -2,12 +2,14 @@ import re
 from datetime import date, datetime, timedelta
 
 from aiogram import F, Router
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
 from database import dict_cursor, get_connection
-from keyboards.main import main_menu_kb, payment_done_kb, recurring_type_kb, skip_comment_kb
+from keyboards.main import CANCEL_TEXT, MAIN_MENU_TEXTS, cancel_kb, main_menu_kb, payment_done_kb, recurring_type_kb, skip_comment_kb
+from services.reports import build_dashboard, money
 
 router = Router()
 
@@ -16,6 +18,7 @@ class ScheduledPaymentStates(StatesGroup):
     waiting_title = State()
     waiting_amount = State()
     waiting_date = State()
+    waiting_comment = State()
 
 
 class RecurringStates(StatesGroup):
@@ -36,6 +39,10 @@ def parse_money(raw: str) -> float:
 
 def parse_flexible_date(raw: str) -> date:
     text = raw.strip().lower()
+    if text == "сегодня":
+        return date.today()
+    if text == "завтра":
+        return date.today() + timedelta(days=1)
     m = re.fullmatch(r"через\s+(\d+)\s+дн(?:я|ей)?", text)
     if m:
         return date.today() + timedelta(days=int(m.group(1)))
@@ -43,18 +50,33 @@ def parse_flexible_date(raw: str) -> date:
         return datetime.strptime(text, "%d.%m.%Y").date()
     except ValueError:
         pass
-    try:
-        dm = datetime.strptime(text, "%d.%m").date()
-        return dm.replace(year=date.today().year)
-    except ValueError as exc:
-        raise ValueError from exc
+    dm = datetime.strptime(text, "%d.%m").date().replace(year=date.today().year)
+    if dm < date.today():
+        dm = dm.replace(year=dm.year + 1)
+    return dm
+
+
+async def _back_to_home(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer(build_dashboard())
+    await message.answer("Главное меню:", reply_markup=main_menu_kb())
+
+
+@router.message(F.text == CANCEL_TEXT)
+async def cancel_any(message: Message, state: FSMContext):
+    await _back_to_home(message, state)
+
+
+@router.message(StateFilter("*"), F.text.in_(MAIN_MENU_TEXTS))
+async def menu_during_fsm(message: Message, state: FSMContext):
+    await state.clear()
 
 
 @router.message(F.text == "📅 Предстоящий платёж")
 async def payment_start(message: Message, state: FSMContext):
     await state.clear()
     await state.set_state(ScheduledPaymentStates.waiting_title)
-    await message.answer("Введите название платежа:")
+    await message.answer("Введите название платежа:", reply_markup=cancel_kb())
 
 
 @router.message(ScheduledPaymentStates.waiting_title)
@@ -65,7 +87,7 @@ async def payment_title(message: Message, state: FSMContext):
         return
     await state.update_data(title=title)
     await state.set_state(ScheduledPaymentStates.waiting_amount)
-    await message.answer("Введите сумму:")
+    await message.answer("Введите сумму:", reply_markup=cancel_kb())
 
 
 @router.message(ScheduledPaymentStates.waiting_amount)
@@ -77,7 +99,7 @@ async def payment_amount(message: Message, state: FSMContext):
         return
     await state.update_data(amount=amount)
     await state.set_state(ScheduledPaymentStates.waiting_date)
-    await message.answer("Введите дату: ДД.ММ.ГГГГ, ДД.ММ или 'через N дней'.")
+    await message.answer("Введите дату: завтра, через 10 дней, 10.06 или 10.06.2026", reply_markup=cancel_kb())
 
 
 @router.message(ScheduledPaymentStates.waiting_date)
@@ -85,18 +107,26 @@ async def payment_date(message: Message, state: FSMContext):
     try:
         payment_date = parse_flexible_date(message.text)
     except ValueError:
-        await message.answer("Не смог распознать дату. Примеры: 10.06.2026, 10.06, через 10 дней")
+        await message.answer("Не понял дату. Можно так: завтра, через 10 дней, 10.06 или 10.06.2026")
         return
+    await state.update_data(payment_date=payment_date.isoformat())
+    await state.set_state(ScheduledPaymentStates.waiting_comment)
+    await message.answer("Введите комментарий или нажмите «Пропустить».", reply_markup=skip_comment_kb())
+
+
+@router.message(ScheduledPaymentStates.waiting_comment)
+async def payment_comment(message: Message, state: FSMContext):
     data = await state.get_data()
+    comment = None if message.text == "Пропустить" else message.text.strip()
     with get_connection() as conn:
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO scheduled_payments(title, amount, payment_date, is_paid) VALUES(%s, %s, %s, FALSE)",
-            (data["title"], data["amount"], payment_date.isoformat()),
+            "INSERT INTO scheduled_payments(title, amount, payment_date, comment, is_paid) VALUES(%s, %s, %s, %s, FALSE)",
+            (data["title"], data["amount"], data["payment_date"], comment),
         )
         cur.close()
-    await state.clear()
-    await message.answer("Предстоящий платёж добавлен ✅", reply_markup=main_menu_kb())
+    await message.answer("Сохранено ✅")
+    await _back_to_home(message, state)
 
 
 @router.callback_query(F.data.startswith("pay_done:"))
@@ -126,7 +156,7 @@ async def recurring_type(message: Message, state: FSMContext):
         return
     await state.update_data(type=op_type)
     await state.set_state(RecurringStates.waiting_title)
-    await message.answer("Введите название:")
+    await message.answer("Введите название:", reply_markup=cancel_kb())
 
 
 @router.message(RecurringStates.waiting_title)
@@ -137,7 +167,7 @@ async def recurring_title(message: Message, state: FSMContext):
         return
     await state.update_data(title=title)
     await state.set_state(RecurringStates.waiting_amount)
-    await message.answer("Введите сумму:")
+    await message.answer("Введите сумму:", reply_markup=cancel_kb())
 
 
 @router.message(RecurringStates.waiting_amount)
@@ -149,7 +179,7 @@ async def recurring_amount(message: Message, state: FSMContext):
         return
     await state.update_data(amount=amount)
     await state.set_state(RecurringStates.waiting_day)
-    await message.answer("Введите день месяца (1-31):")
+    await message.answer("Введите день месяца (1-31):", reply_markup=cancel_kb())
 
 
 @router.message(RecurringStates.waiting_day)
@@ -163,7 +193,7 @@ async def recurring_day(message: Message, state: FSMContext):
         return
     await state.update_data(day_of_month=day)
     await state.set_state(RecurringStates.waiting_category)
-    await message.answer("Введите категорию:")
+    await message.answer("Введите категорию:", reply_markup=cancel_kb())
 
 
 @router.message(RecurringStates.waiting_category)
@@ -191,8 +221,8 @@ async def recurring_comment(message: Message, state: FSMContext):
             (data["title"], data["type"], data["amount"], data["category"], data["day_of_month"], comment),
         )
         cur.close()
-    await state.clear()
-    await message.answer("Постоянная операция сохранена ✅", reply_markup=main_menu_kb())
+    await message.answer("Сохранено ✅")
+    await _back_to_home(message, state)
 
 
 @router.message(F.text == "📅 Ближайшие платежи")
@@ -206,5 +236,5 @@ async def list_payments(message: Message):
         await message.answer("Нет ближайших неоплаченных платежей.")
         return
     for row in rows:
-        txt = f"{row['payment_date'].strftime('%d.%m')} — {row['title']} — {float(row['amount']):,.2f} ₽"
+        txt = f"{row['payment_date'].strftime('%d.%m')} — {row['title']} — {money(float(row['amount']))} ₽"
         await message.answer(txt, reply_markup=payment_done_kb(row['id']))
