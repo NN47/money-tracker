@@ -67,7 +67,21 @@ async def cancel_any(message: Message, state: FSMContext):
     await _back_to_home(message, state)
 
 
-@router.message(StateFilter("*"), F.text.in_(MAIN_MENU_TEXTS))
+@router.message(
+    StateFilter(
+        ScheduledPaymentStates.waiting_title,
+        ScheduledPaymentStates.waiting_amount,
+        ScheduledPaymentStates.waiting_date,
+        ScheduledPaymentStates.waiting_comment,
+        RecurringStates.waiting_type,
+        RecurringStates.waiting_title,
+        RecurringStates.waiting_amount,
+        RecurringStates.waiting_day,
+        RecurringStates.waiting_category,
+        RecurringStates.waiting_comment,
+    ),
+    F.text.in_(MAIN_MENU_TEXTS),
+)
 async def menu_during_fsm(message: Message, state: FSMContext):
     await state.clear()
 
