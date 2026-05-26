@@ -59,7 +59,16 @@ async def cancel_any(message: Message, state: FSMContext):
     await _back_to_home(message, state)
 
 
-@router.message(StateFilter("*"), F.text.in_(MAIN_MENU_TEXTS))
+@router.message(
+    StateFilter(
+        TransactionStates.waiting_amount,
+        TransactionStates.waiting_category,
+        TransactionStates.waiting_date_choice,
+        TransactionStates.waiting_manual_date,
+        TransactionStates.waiting_comment,
+    ),
+    F.text.in_(MAIN_MENU_TEXTS),
+)
 async def menu_during_transaction(message: Message, state: FSMContext):
     await state.clear()
 
