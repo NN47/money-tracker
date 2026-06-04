@@ -12,6 +12,22 @@ def moscow_today() -> date:
     return datetime.now(MOSCOW_TZ).date()
 
 
+def fetch_all_active_recurring_operations():
+    with get_connection() as conn:
+        cur = dict_cursor(conn)
+        cur.execute(
+            """
+            SELECT id, title, type, amount, category, day_of_month, frequency, comment
+            FROM recurring_operations
+            WHERE is_active = TRUE
+            ORDER BY day_of_month NULLS LAST, id
+            """
+        )
+        rows = cur.fetchall()
+        cur.close()
+    return rows
+
+
 def fetch_today_recurring_payments(payment_date: date | None = None):
     today = payment_date or moscow_today()
     with get_connection() as conn:

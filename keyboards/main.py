@@ -5,8 +5,8 @@ MAIN_MENU_TEXTS = {
     "💼 Главный экран",
     "➕ Доход",
     "➖ Расход",
-    "📅 Предстоящий платёж",
-    "🔁 Постоянная операция",
+    "🔁 Регулярные платежи",
+    "➕ Добавить платеж",
     "📊 Отчёт",
 }
 
@@ -16,8 +16,18 @@ def main_menu_kb() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text="💼 Главный экран")],
             [KeyboardButton(text="➕ Доход"), KeyboardButton(text="➖ Расход")],
-            [KeyboardButton(text="📅 Предстоящий платёж")],
-            [KeyboardButton(text="🔁 Постоянная операция")],
+            [KeyboardButton(text="🔁 Регулярные платежи")],
+            [KeyboardButton(text="📊 Отчёт")],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def recurring_payments_menu_kb() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="➕ Добавить платеж")],
+            [KeyboardButton(text="💼 Главный экран")],
             [KeyboardButton(text="📊 Отчёт")],
         ],
         resize_keyboard=True,
