@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import re
 from datetime import date, datetime, timedelta
 
@@ -14,6 +15,7 @@ from services.recurring_payments import fetch_unpaid_today_recurring_payments, m
 from services.reports import build_dashboard, money
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 OWNER_TELEGRAM_ID: int | None = None
 
@@ -38,6 +40,25 @@ class RecurringStates(StatesGroup):
     waiting_day = State()
     waiting_category = State()
     waiting_comment = State()
+
+
+async def send_callback_message(callback: CallbackQuery, text: str, reply_markup=None) -> None:
+    if callback.message:
+        try:
+            await callback.message.answer(text, reply_markup=reply_markup)
+            return
+        except Exception:
+            logger.exception("Failed to send callback reply in chat; falling back to private message")
+    await callback.bot.send_message(callback.from_user.id, text, reply_markup=reply_markup)
+
+
+async def remove_inline_keyboard(callback: CallbackQuery) -> None:
+    if not callback.message:
+        return
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        logger.exception("Failed to remove inline keyboard after callback %s", callback.data)
 
 
 def parse_money(raw: str) -> float:
@@ -181,43 +202,75 @@ async def payment_comment(message: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("pay_done:"))
 async def payment_mark_done(callback: CallbackQuery):
-    payment_id = int(callback.data.split(":")[1])
-    with get_connection() as conn:
-        cur = conn.cursor()
-        cur.execute("UPDATE scheduled_payments SET is_paid = TRUE WHERE id = %s", (payment_id,))
-        cur.close()
-    await callback.message.edit_reply_markup(reply_markup=None)
-    await callback.answer("Платёж отмечен как оплаченный")
+    try:
+        payment_id = int(callback.data.split(":", maxsplit=1)[1])
+    except (IndexError, ValueError):
+        await callback.answer("Не понял, какой платёж отметить", show_alert=True)
+        return
+
+    await callback.answer("Отмечаю платёж…")
+
+    try:
+        with get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE scheduled_payments SET is_paid = TRUE WHERE id = %s RETURNING title",
+                (payment_id,),
+            )
+            row = cur.fetchone()
+            cur.close()
+    except Exception:
+        logger.exception("Failed to mark scheduled payment %s as paid", payment_id)
+        await send_callback_message(callback, "Не получилось отметить платёж. Попробуйте ещё раз.")
+        return
+
+    if not row:
+        await send_callback_message(callback, "Этот платёж не найден или уже удалён.")
+        return
+
+    await remove_inline_keyboard(callback)
+    await send_callback_message(callback, f"Платёж «{row[0]}» отмечен как оплаченный ✅", reply_markup=main_menu_kb())
 
 
 @router.callback_query(F.data.startswith("pay_recurring:"))
 async def recurring_payment_mark_paid(callback: CallbackQuery):
-    operation_id = int(callback.data.split(":", maxsplit=1)[1])
-    result = mark_recurring_payment_paid(operation_id)
+    try:
+        operation_id = int(callback.data.split(":", maxsplit=1)[1])
+    except (IndexError, ValueError):
+        await callback.answer("Не понял, какой платёж отметить", show_alert=True)
+        return
+
+    await callback.answer("Записываю платёж…")
+
+    try:
+        result = mark_recurring_payment_paid(operation_id)
+    except Exception:
+        logger.exception("Failed to mark recurring operation %s as paid", operation_id)
+        await send_callback_message(callback, "Не получилось записать платёж в расходы. Попробуйте ещё раз.")
+        return
+
     status = result["status"]
 
     if status == "paid":
         title = result["title"]
-        await callback.answer(f"Платёж «{title}» записан в расходы ✅")
-        if callback.message:
-            await callback.message.edit_reply_markup(reply_markup=None)
-            unpaid_operations = fetch_unpaid_today_recurring_payments()
-            await callback.message.answer(
-                f"Платёж «{title}» записан в расходы ✅",
-                reply_markup=main_menu_kb(),
-            )
-            await callback.message.answer(build_dashboard(), reply_markup=recurring_due_kb(unpaid_operations))
+        await remove_inline_keyboard(callback)
+        unpaid_operations = fetch_unpaid_today_recurring_payments()
+        await send_callback_message(
+            callback,
+            f"Платёж «{title}» записан в расходы ✅",
+            reply_markup=main_menu_kb(),
+        )
+        await send_callback_message(callback, build_dashboard(), reply_markup=recurring_due_kb(unpaid_operations))
         return
 
     if status == "already_paid":
-        await callback.answer("Этот платёж уже учтён сегодня ✅", show_alert=True)
-        if callback.message:
-            await callback.message.edit_reply_markup(reply_markup=None)
-            unpaid_operations = fetch_unpaid_today_recurring_payments()
-            await callback.message.answer(build_dashboard(), reply_markup=recurring_due_kb(unpaid_operations))
+        await remove_inline_keyboard(callback)
+        unpaid_operations = fetch_unpaid_today_recurring_payments()
+        await send_callback_message(callback, "Этот платёж уже учтён сегодня ✅", reply_markup=main_menu_kb())
+        await send_callback_message(callback, build_dashboard(), reply_markup=recurring_due_kb(unpaid_operations))
         return
 
-    await callback.answer("Этот платёж не найден или отключён", show_alert=True)
+    await send_callback_message(callback, "Этот платёж не найден или отключён.")
 
 
 @router.callback_query(F.data.startswith("remind_recurring:"))
