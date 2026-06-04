@@ -77,6 +77,19 @@ def init_db() -> None:
 
             cur.execute(
                 """
+                CREATE TABLE IF NOT EXISTS recurring_payments_log (
+                    id SERIAL PRIMARY KEY,
+                    recurring_operation_id INTEGER REFERENCES recurring_operations(id) ON DELETE CASCADE,
+                    payment_date DATE NOT NULL,
+                    transaction_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(recurring_operation_id, payment_date)
+                )
+                """
+            )
+
+            cur.execute(
+                """
                 ALTER TABLE IF EXISTS transactions
                 ADD COLUMN IF NOT EXISTS operation_date DATE
                 """
