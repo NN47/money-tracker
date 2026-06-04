@@ -16,15 +16,20 @@ from keyboards.main import (
     cancel_kb,
     main_menu_kb,
     payment_done_kb,
+    recurring_delete_confirm_kb,
     recurring_due_kb,
+    recurring_payments_actions_kb,
     recurring_payments_menu_kb,
     recurring_type_kb,
     skip_comment_kb,
 )
 from services.recurring_payments import (
+    deactivate_recurring_operation,
+    fetch_active_recurring_operation,
     fetch_all_active_recurring_operations,
     fetch_unpaid_today_recurring_payments,
     mark_recurring_payment_paid,
+    update_recurring_operation,
 )
 from services.reports import build_dashboard, money
 
@@ -134,8 +139,9 @@ async def send_recurring_operations_section(message: Message) -> None:
     operations = fetch_all_active_recurring_operations()
     await message.answer(
         build_recurring_operations_section(operations),
-        reply_markup=recurring_payments_menu_kb(),
+        reply_markup=recurring_payments_actions_kb(operations),
     )
+    await message.answer("Меню регулярных платежей:", reply_markup=recurring_payments_menu_kb())
 
 
 def build_recurring_payment_notification(operations) -> str:
@@ -325,6 +331,90 @@ async def recurring_payment_remind_later(callback: CallbackQuery):
     await callback.answer("Напомню через час ⏰")
 
 
+@router.callback_query(F.data.startswith("edit_recurring:"))
+async def recurring_edit_start(callback: CallbackQuery, state: FSMContext):
+    try:
+        operation_id = int(callback.data.split(":", maxsplit=1)[1])
+    except (IndexError, ValueError):
+        await callback.answer("Не понял, какой платёж редактировать", show_alert=True)
+        return
+
+    operation = fetch_active_recurring_operation(operation_id)
+    if not operation:
+        await callback.answer("Этот платёж не найден или уже удалён", show_alert=True)
+        return
+
+    await state.clear()
+    await state.update_data(edit_operation_id=operation_id)
+    await state.set_state(RecurringStates.waiting_type)
+    await callback.answer("Редактируем платёж")
+    await remove_inline_keyboard(callback)
+    await send_callback_message(
+        callback,
+        f"Редактируем «{operation['title']}». Выберите новый тип операции:",
+        reply_markup=recurring_type_kb(),
+    )
+
+
+@router.callback_query(F.data.startswith("delete_recurring:"))
+async def recurring_delete_ask_confirmation(callback: CallbackQuery):
+    try:
+        operation_id = int(callback.data.split(":", maxsplit=1)[1])
+    except (IndexError, ValueError):
+        await callback.answer("Не понял, какой платёж удалить", show_alert=True)
+        return
+
+    operation = fetch_active_recurring_operation(operation_id)
+    if not operation:
+        await callback.answer("Этот платёж не найден или уже удалён", show_alert=True)
+        return
+
+    await callback.answer()
+    await send_callback_message(
+        callback,
+        f"Вы точно хотите удалить регулярный платёж «{operation['title']}»?",
+        reply_markup=recurring_delete_confirm_kb(operation_id),
+    )
+
+
+@router.callback_query(F.data.startswith("cancel_delete_recurring:"))
+async def recurring_delete_cancel(callback: CallbackQuery):
+    await callback.answer("Удаление отменено")
+    await remove_inline_keyboard(callback)
+    await send_callback_message(callback, "Удаление отменено.", reply_markup=main_menu_kb())
+
+
+@router.callback_query(F.data.startswith("confirm_delete_recurring:"))
+async def recurring_delete_confirm(callback: CallbackQuery):
+    try:
+        operation_id = int(callback.data.split(":", maxsplit=1)[1])
+    except (IndexError, ValueError):
+        await callback.answer("Не понял, какой платёж удалить", show_alert=True)
+        return
+
+    try:
+        deleted = deactivate_recurring_operation(operation_id)
+    except Exception:
+        logger.exception("Failed to delete recurring operation %s", operation_id)
+        await send_callback_message(callback, "Не получилось удалить платёж. Попробуйте ещё раз.")
+        return
+
+    await remove_inline_keyboard(callback)
+    if not deleted:
+        await callback.answer("Платёж не найден", show_alert=True)
+        await send_callback_message(callback, "Этот платёж не найден или уже удалён.", reply_markup=main_menu_kb())
+        return
+
+    await callback.answer("Удалено")
+    await send_callback_message(callback, f"Регулярный платёж «{deleted['title']}» удалён 🗑", reply_markup=main_menu_kb())
+    operations = fetch_all_active_recurring_operations()
+    await send_callback_message(
+        callback,
+        build_recurring_operations_section(operations),
+        reply_markup=recurring_payments_actions_kb(operations),
+    )
+
+
 @router.message(F.text == "🔁 Регулярные платежи")
 async def recurring_payments_section(message: Message, state: FSMContext):
     await state.clear()
@@ -402,17 +492,35 @@ async def recurring_category(message: Message, state: FSMContext):
 async def recurring_comment(message: Message, state: FSMContext):
     data = await state.get_data()
     comment = None if message.text == "Пропустить" else message.text.strip()
-    with get_connection() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            """
-            INSERT INTO recurring_operations(title, type, amount, category, day_of_month, frequency, comment)
-            VALUES(%s, %s, %s, %s, %s, 'monthly', %s)
-            """,
-            (data["title"], data["type"], data["amount"], data["category"], data["day_of_month"], comment),
+    edit_operation_id = data.get("edit_operation_id")
+
+    if edit_operation_id:
+        updated = update_recurring_operation(
+            edit_operation_id,
+            data["title"],
+            data["type"],
+            data["amount"],
+            data["category"],
+            data["day_of_month"],
+            comment,
         )
-        cur.close()
-    await message.answer("Сохранено ✅")
+        if updated:
+            await message.answer("Изменения сохранены ✅")
+        else:
+            await message.answer("Этот платёж не найден или уже удалён.")
+    else:
+        with get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO recurring_operations(title, type, amount, category, day_of_month, frequency, comment)
+                VALUES(%s, %s, %s, %s, %s, 'monthly', %s)
+                """,
+                (data["title"], data["type"], data["amount"], data["category"], data["day_of_month"], comment),
+            )
+            cur.close()
+        await message.answer("Сохранено ✅")
+
     await state.clear()
     await send_recurring_operations_section(message)
 

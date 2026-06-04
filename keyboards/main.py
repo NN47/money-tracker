@@ -23,6 +23,49 @@ def main_menu_kb() -> ReplyKeyboardMarkup:
     )
 
 
+def recurring_payments_actions_kb(operations) -> InlineKeyboardMarkup | None:
+    rows = []
+    for operation in operations:
+        operation_id = operation["id"]
+        title = operation["title"]
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"✏️ Редактировать: {title}",
+                    callback_data=f"edit_recurring:{operation_id}",
+                )
+            ]
+        )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"🗑 Удалить: {title}",
+                    callback_data=f"delete_recurring:{operation_id}",
+                )
+            ]
+        )
+    if not rows:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def recurring_delete_confirm_kb(operation_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Да, удалить",
+                    callback_data=f"confirm_delete_recurring:{operation_id}",
+                ),
+                InlineKeyboardButton(
+                    text="Отмена",
+                    callback_data=f"cancel_delete_recurring:{operation_id}",
+                ),
+            ]
+        ]
+    )
+
+
 def recurring_payments_menu_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
