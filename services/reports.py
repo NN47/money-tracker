@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 
 from database import dict_cursor, get_connection
+from services.recurring_payments import fetch_today_recurring_payments, split_by_payment_status
 
 
 def money(value: float) -> str:
@@ -39,6 +40,8 @@ def _fetch_main_data():
 
 def build_dashboard() -> str:
     today, income, expense, payments, recurring = _fetch_main_data()
+    today_recurring = fetch_today_recurring_payments()
+    unpaid_today, paid_today = split_by_payment_status(today_recurring)
     balance = income - expense
     lines = [
         "💼 Главный экран",
@@ -47,9 +50,14 @@ def build_dashboard() -> str:
         f"Доходы: {money(income)} ₽",
         f"Расходы: {money(expense)} ₽",
         f"Баланс: {money(balance)} ₽",
-        "",
-        "📅 Ближайшие платежи:",
     ]
+    if unpaid_today:
+        lines.extend(["", "🔥 Сегодня к оплате:"])
+        lines.extend([f"{r['title']} — {money(float(r['amount']))} ₽" for r in unpaid_today])
+    if paid_today:
+        lines.extend(["", "✅ Сегодня оплачено:"])
+        lines.extend([f"{r['title']} — {money(float(r['amount']))} ₽" for r in paid_today])
+    lines.extend(["", "📅 Ближайшие платежи:"])
     if payments:
         lines.extend([f"{r['payment_date'].strftime('%d.%m')} — {r['title']} — {money(float(r['amount']))} ₽" for r in payments])
     else:

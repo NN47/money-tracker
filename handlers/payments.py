@@ -1,17 +1,27 @@
+import asyncio
 import re
 from datetime import date, datetime, timedelta
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
 from database import dict_cursor, get_connection
-from keyboards.main import CANCEL_TEXT, MAIN_MENU_TEXTS, cancel_kb, main_menu_kb, payment_done_kb, recurring_type_kb, skip_comment_kb
+from keyboards.main import CANCEL_TEXT, MAIN_MENU_TEXTS, cancel_kb, main_menu_kb, payment_done_kb, recurring_due_kb, recurring_type_kb, skip_comment_kb
+from services.recurring_payments import fetch_unpaid_today_recurring_payments, mark_recurring_payment_paid
 from services.reports import build_dashboard, money
 
 router = Router()
+
+OWNER_TELEGRAM_ID: int | None = None
+
+
+def configure_owner(owner_telegram_id: int | None) -> None:
+    global OWNER_TELEGRAM_ID
+    OWNER_TELEGRAM_ID = owner_telegram_id
+
 
 
 class ScheduledPaymentStates(StatesGroup):
@@ -58,8 +68,35 @@ def parse_flexible_date(raw: str) -> date:
 
 async def _back_to_home(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer(build_dashboard())
+    unpaid_operations = fetch_unpaid_today_recurring_payments()
+    await message.answer(build_dashboard(), reply_markup=recurring_due_kb(unpaid_operations))
     await message.answer("Главное меню:", reply_markup=main_menu_kb())
+
+
+def build_recurring_payment_notification(operations) -> str:
+    lines = ["🔔 Сегодня нужно оплатить:", ""]
+    lines.extend([f"{row['title']} — {money(float(row['amount']))} ₽" for row in operations])
+    lines.extend(["", "Оплатил?"])
+    return "\n".join(lines)
+
+
+async def send_recurring_payment_notification(bot: Bot, chat_id: int, operation_ids: list[int] | None = None) -> None:
+    operations = fetch_unpaid_today_recurring_payments()
+    if operation_ids is not None:
+        allowed_ids = set(operation_ids)
+        operations = [row for row in operations if row["id"] in allowed_ids]
+    if not operations:
+        return
+    await bot.send_message(
+        chat_id,
+        build_recurring_payment_notification(operations),
+        reply_markup=recurring_due_kb(operations, remind_text="⏰ Напомнить через час"),
+    )
+
+
+async def remind_later(bot: Bot, chat_id: int, operation_id: int, delay_seconds: int = 3600) -> None:
+    await asyncio.sleep(delay_seconds)
+    await send_recurring_payment_notification(bot, chat_id, [operation_id])
 
 
 @router.message(F.text == CANCEL_TEXT)
@@ -152,6 +189,37 @@ async def payment_mark_done(callback: CallbackQuery):
         cur.close()
     await callback.message.edit_reply_markup(reply_markup=None)
     await callback.answer("Платёж отмечен как оплаченный")
+
+
+@router.callback_query(F.data.startswith("rec_pay:"))
+async def recurring_payment_mark_paid(callback: CallbackQuery):
+    operation_id = int(callback.data.split(":")[1])
+    result = mark_recurring_payment_paid(operation_id)
+    if result == "paid":
+        await callback.answer("Платёж записан в расходы ✅")
+        if callback.message:
+            await callback.message.edit_reply_markup(reply_markup=None)
+            unpaid_operations = fetch_unpaid_today_recurring_payments()
+            await callback.message.answer("Платёж записан в расходы ✅")
+            await callback.message.answer(build_dashboard(), reply_markup=recurring_due_kb(unpaid_operations))
+            await callback.message.answer("Главное меню:", reply_markup=main_menu_kb())
+        return
+    if result == "already_paid":
+        await callback.answer("Этот платёж уже оплачен сегодня", show_alert=True)
+        if callback.message:
+            await callback.message.edit_reply_markup(reply_markup=None)
+            unpaid_operations = fetch_unpaid_today_recurring_payments()
+            await callback.message.answer(build_dashboard(), reply_markup=recurring_due_kb(unpaid_operations))
+        return
+    await callback.answer("Этот платёж не найден среди сегодняшних", show_alert=True)
+
+
+@router.callback_query(F.data.startswith("rec_later:"))
+async def recurring_payment_remind_later(callback: CallbackQuery):
+    operation_id = int(callback.data.split(":")[1])
+    chat_id = OWNER_TELEGRAM_ID or callback.from_user.id
+    asyncio.create_task(remind_later(callback.bot, chat_id, operation_id))
+    await callback.answer("Напомню через час")
 
 
 @router.message(F.text == "🔁 Постоянная операция")

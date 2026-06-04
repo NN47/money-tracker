@@ -50,5 +50,20 @@ def payment_done_kb(payment_id: int) -> InlineKeyboardMarkup:
     )
 
 
+def recurring_due_kb(operations, remind_text: str = "⏰ Напомнить позже") -> InlineKeyboardMarkup | None:
+    rows = []
+    for operation in operations:
+        operation_id = operation["id"]
+        rows.append(
+            [
+                InlineKeyboardButton(text="✅ Оплатил", callback_data=f"rec_pay:{operation_id}"),
+                InlineKeyboardButton(text=remind_text, callback_data=f"rec_later:{operation_id}"),
+            ]
+        )
+    if not rows:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def cancel_kb() -> ReplyKeyboardMarkup:
     return with_cancel_kb()
