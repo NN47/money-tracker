@@ -55,7 +55,7 @@ def fetch_unpaid_today_recurring_payments(payment_date: date | None = None):
     return unpaid
 
 
-def mark_recurring_payment_paid(recurring_operation_id: int, payment_date: date | None = None) -> str:
+def mark_recurring_payment_paid(recurring_operation_id: int, payment_date: date | None = None) -> dict:
     today = payment_date or moscow_today()
     with get_connection() as conn:
         cur = dict_cursor(conn)
@@ -66,28 +66,27 @@ def mark_recurring_payment_paid(recurring_operation_id: int, payment_date: date 
             WHERE id = %s
               AND is_active = TRUE
               AND type IN ('payment', 'expense')
-              AND day_of_month = %s
+            FOR UPDATE
             """,
-            (recurring_operation_id, today.day),
+            (recurring_operation_id,),
         )
         operation = cur.fetchone()
         if not operation:
             cur.close()
-            return "not_due"
+            return {"status": "not_found"}
 
         cur.execute(
             """
-            INSERT INTO recurring_payments_log(recurring_operation_id, payment_date)
-            VALUES(%s, %s)
-            ON CONFLICT (recurring_operation_id, payment_date) DO NOTHING
-            RETURNING id
+            SELECT id
+            FROM recurring_payments_log
+            WHERE recurring_operation_id = %s
+              AND payment_date = %s
             """,
             (recurring_operation_id, today),
         )
-        log = cur.fetchone()
-        if not log:
+        if cur.fetchone():
             cur.close()
-            return "already_paid"
+            return {"status": "already_paid", "title": operation["title"]}
 
         category = operation["category"] or DEFAULT_PAYMENT_CATEGORY
         amount = operation["amount"]
@@ -105,11 +104,10 @@ def mark_recurring_payment_paid(recurring_operation_id: int, payment_date: date 
         transaction_id = cur.fetchone()["id"]
         cur.execute(
             """
-            UPDATE recurring_payments_log
-            SET transaction_id = %s
-            WHERE id = %s
+            INSERT INTO recurring_payments_log(recurring_operation_id, payment_date, transaction_id)
+            VALUES(%s, %s, %s)
             """,
-            (transaction_id, log["id"]),
+            (recurring_operation_id, today, transaction_id),
         )
         cur.close()
-    return "paid"
+    return {"status": "paid", "title": operation["title"]}
