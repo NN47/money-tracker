@@ -10,8 +10,22 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
 from database import dict_cursor, get_connection
-from keyboards.main import CANCEL_TEXT, MAIN_MENU_TEXTS, cancel_kb, main_menu_kb, payment_done_kb, recurring_due_kb, recurring_type_kb, skip_comment_kb
-from services.recurring_payments import fetch_unpaid_today_recurring_payments, mark_recurring_payment_paid
+from keyboards.main import (
+    CANCEL_TEXT,
+    MAIN_MENU_TEXTS,
+    cancel_kb,
+    main_menu_kb,
+    payment_done_kb,
+    recurring_due_kb,
+    recurring_payments_menu_kb,
+    recurring_type_kb,
+    skip_comment_kb,
+)
+from services.recurring_payments import (
+    fetch_all_active_recurring_operations,
+    fetch_unpaid_today_recurring_payments,
+    mark_recurring_payment_paid,
+)
 from services.reports import build_dashboard, money
 
 router = Router()
@@ -92,6 +106,36 @@ async def _back_to_home(message: Message, state: FSMContext):
     unpaid_operations = fetch_unpaid_today_recurring_payments()
     await message.answer(build_dashboard(), reply_markup=recurring_due_kb(unpaid_operations))
     await message.answer("Главное меню:", reply_markup=main_menu_kb())
+
+
+def build_recurring_operations_section(operations) -> str:
+    if not operations:
+        return "Регулярные платежи пока не добавлены. Нажмите «➕ Добавить платеж», чтобы создать первый."
+
+    type_labels = {
+        "income": "доход",
+        "expense": "расход",
+        "payment": "платёж",
+    }
+    lines = ["🔁 Регулярные платежи:"]
+    for operation in operations:
+        day = operation["day_of_month"]
+        day_text = f"{day} число" if day else "без даты"
+        type_text = type_labels.get(operation["type"], operation["type"])
+        category = operation["category"] or "без категории"
+        lines.append(
+            f"• {day_text} — {operation['title']} — {money(float(operation['amount']))} ₽ "
+            f"({type_text}, {category})"
+        )
+    return "\n".join(lines)
+
+
+async def send_recurring_operations_section(message: Message) -> None:
+    operations = fetch_all_active_recurring_operations()
+    await message.answer(
+        build_recurring_operations_section(operations),
+        reply_markup=recurring_payments_menu_kb(),
+    )
 
 
 def build_recurring_payment_notification(operations) -> str:
@@ -281,7 +325,13 @@ async def recurring_payment_remind_later(callback: CallbackQuery):
     await callback.answer("Напомню через час ⏰")
 
 
-@router.message(F.text == "🔁 Постоянная операция")
+@router.message(F.text == "🔁 Регулярные платежи")
+async def recurring_payments_section(message: Message, state: FSMContext):
+    await state.clear()
+    await send_recurring_operations_section(message)
+
+
+@router.message(F.text == "➕ Добавить платеж")
 async def recurring_start(message: Message, state: FSMContext):
     await state.clear()
     await state.set_state(RecurringStates.waiting_type)
@@ -363,7 +413,8 @@ async def recurring_comment(message: Message, state: FSMContext):
         )
         cur.close()
     await message.answer("Сохранено ✅")
-    await _back_to_home(message, state)
+    await state.clear()
+    await send_recurring_operations_section(message)
 
 
 @router.message(F.text == "📅 Ближайшие платежи")
