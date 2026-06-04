@@ -53,10 +53,10 @@ def build_dashboard() -> str:
     ]
     if unpaid_today:
         lines.extend(["", "🔥 Сегодня к оплате:"])
-        lines.extend([f"{r['title']} — {money(float(r['amount']))} ₽" for r in unpaid_today])
+        lines.extend([f"• {r['title']} — {money(float(r['amount']))} ₽" for r in unpaid_today])
     if paid_today:
         lines.extend(["", "✅ Сегодня оплачено:"])
-        lines.extend([f"{r['title']} — {money(float(r['amount']))} ₽" for r in paid_today])
+        lines.extend([f"• {r['title']} — {money(float(r['amount']))} ₽" for r in paid_today])
     lines.extend(["", "📅 Ближайшие платежи:"])
     if payments:
         lines.extend([f"{r['payment_date'].strftime('%d.%m')} — {r['title']} — {money(float(r['amount']))} ₽" for r in payments])

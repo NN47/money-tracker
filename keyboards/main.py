@@ -50,14 +50,25 @@ def payment_done_kb(payment_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def recurring_due_kb(operations, remind_text: str = "⏰ Напомнить позже") -> InlineKeyboardMarkup | None:
+def recurring_due_kb(operations) -> InlineKeyboardMarkup | None:
     rows = []
     for operation in operations:
         operation_id = operation["id"]
+        title = operation["title"]
         rows.append(
             [
-                InlineKeyboardButton(text="✅ Оплатил", callback_data=f"rec_pay:{operation_id}"),
-                InlineKeyboardButton(text=remind_text, callback_data=f"rec_later:{operation_id}"),
+                InlineKeyboardButton(
+                    text=f"✅ Оплатил: {title}",
+                    callback_data=f"pay_recurring:{operation_id}",
+                )
+            ]
+        )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"⏰ Напомнить: {title}",
+                    callback_data=f"remind_recurring:{operation_id}",
+                )
             ]
         )
     if not rows:
