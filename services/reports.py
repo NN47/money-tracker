@@ -3,6 +3,8 @@ from datetime import date, timedelta
 from database import dict_cursor, get_connection
 from services.recurring_payments import fetch_today_recurring_payments, split_by_payment_status
 
+UPCOMING_PAYMENTS_DAYS = 10
+
 
 def money(value: float) -> str:
     formatted = f"{value:,.2f}".replace(",", " ")
@@ -23,7 +25,7 @@ def month_bounds(today: date):
 def _fetch_main_data():
     today = date.today()
     start, nxt = month_bounds(today)
-    horizon = today + timedelta(days=30)
+    horizon = today + timedelta(days=UPCOMING_PAYMENTS_DAYS)
     with get_connection() as conn:
         cur = dict_cursor(conn)
         cur.execute("SELECT COALESCE(SUM(amount),0) total FROM transactions WHERE type='income' AND operation_date >= %s AND operation_date < %s", (start, nxt))
@@ -61,7 +63,7 @@ def build_dashboard() -> str:
     if payments:
         lines.extend([f"{r['payment_date'].strftime('%d.%m')} — {r['title']} — {money(float(r['amount']))} ₽" for r in payments])
     else:
-        lines.append("Нет неоплаченных платежей на 30 дней")
+        lines.append(f"Нет неоплаченных платежей на {UPCOMING_PAYMENTS_DAYS} дней")
     lines.append("")
     lines.append("🔁 Постоянные операции:")
     if recurring:
@@ -87,7 +89,7 @@ def build_summary_report() -> str:
     else:
         lines.append("Операций пока нет")
     lines.append("")
-    lines.append("Ближайшие 10 платежей:")
+    lines.append(f"Ближайшие платежи на {UPCOMING_PAYMENTS_DAYS} дней:")
     if payments:
         lines.extend([f"{r['payment_date'].strftime('%d.%m')} — {r['title']} — {money(float(r['amount']))} ₽" for r in payments[:10]])
     else:
