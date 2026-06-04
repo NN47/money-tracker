@@ -50,8 +50,11 @@ async def telegram_webhook(request: web.Request) -> web.Response:
 
 async def on_startup(app: web.Application) -> None:
     bot: Bot = app["bot"]
+    dp: Dispatcher = app["dp"]
     webhook_url: str = app["webhook_url"]
-    await bot.set_webhook(f"{webhook_url}/webhook")
+    allowed_updates = dp.resolve_used_update_types()
+    await bot.set_webhook(f"{webhook_url}/webhook", allowed_updates=allowed_updates)
+    logging.info("Webhook configured with allowed updates: %s", allowed_updates)
     owner_telegram_id: int | None = app.get("owner_telegram_id")
     if owner_telegram_id is None:
         logging.warning("OWNER_TELEGRAM_ID is not set; recurring payment notifications are disabled")
