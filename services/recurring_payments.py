@@ -28,6 +28,71 @@ def fetch_all_active_recurring_operations():
     return rows
 
 
+def fetch_active_recurring_operation(recurring_operation_id: int):
+    with get_connection() as conn:
+        cur = dict_cursor(conn)
+        cur.execute(
+            """
+            SELECT id, title, type, amount, category, day_of_month, frequency, comment
+            FROM recurring_operations
+            WHERE id = %s
+              AND is_active = TRUE
+            """,
+            (recurring_operation_id,),
+        )
+        row = cur.fetchone()
+        cur.close()
+    return row
+
+
+def update_recurring_operation(
+    recurring_operation_id: int,
+    title: str,
+    op_type: str,
+    amount: float,
+    category: str,
+    day_of_month: int,
+    comment: str | None,
+) -> bool:
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE recurring_operations
+            SET title = %s,
+                type = %s,
+                amount = %s,
+                category = %s,
+                day_of_month = %s,
+                comment = %s
+            WHERE id = %s
+              AND is_active = TRUE
+            """,
+            (title, op_type, amount, category, day_of_month, comment, recurring_operation_id),
+        )
+        updated = cur.rowcount > 0
+        cur.close()
+    return updated
+
+
+def deactivate_recurring_operation(recurring_operation_id: int):
+    with get_connection() as conn:
+        cur = dict_cursor(conn)
+        cur.execute(
+            """
+            UPDATE recurring_operations
+            SET is_active = FALSE
+            WHERE id = %s
+              AND is_active = TRUE
+            RETURNING title
+            """,
+            (recurring_operation_id,),
+        )
+        row = cur.fetchone()
+        cur.close()
+    return row
+
+
 def fetch_today_recurring_payments(payment_date: date | None = None):
     today = payment_date or moscow_today()
     with get_connection() as conn:
