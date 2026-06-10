@@ -73,6 +73,12 @@ def build_dashboard() -> str:
     return "\n".join(lines)
 
 
+def _format_transaction_date(operation_date: date, period_start: date, period_end: date) -> str:
+    if period_start <= operation_date < period_end:
+        return operation_date.strftime("%d.%m")
+    return operation_date.strftime("%d.%m.%Y")
+
+
 def build_summary_report() -> str:
     today, income, expense, payments, _ = _fetch_main_data()
     balance = income - expense
@@ -81,11 +87,22 @@ def build_summary_report() -> str:
         cur.execute("SELECT type, amount, category, operation_date FROM transactions ORDER BY operation_date DESC, id DESC LIMIT 10")
         tx = cur.fetchall()
         cur.close()
-    lines = ["📊 Отчёт", "", f"Период: {today.strftime('%m.%Y')}", f"Доходы: {money(income)} ₽", f"Расходы: {money(expense)} ₽", f"Баланс: {money(balance)} ₽", "", "Последние 10 операций:"]
+    start, nxt = month_bounds(today)
+    lines = [
+        "📊 Отчёт",
+        "",
+        f"Период: {today.strftime('%m.%Y')}",
+        f"Доходы: {money(income)} ₽",
+        f"Расходы: {money(expense)} ₽",
+        f"Баланс: {money(balance)} ₽",
+        "",
+        "Последние 10 операций:",
+    ]
     if tx:
         for row in tx:
             sign = "+" if row["type"] == "income" else "-"
-            lines.append(f"{row['operation_date'].strftime('%d.%m')} {sign}{money(float(row['amount']))} ₽ — {row['category']}")
+            tx_date = _format_transaction_date(row["operation_date"], start, nxt)
+            lines.append(f"{tx_date} {sign}{money(float(row['amount']))} ₽ — {row['category']}")
     else:
         lines.append("Операций пока нет")
     lines.append("")

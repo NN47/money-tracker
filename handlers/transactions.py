@@ -1,5 +1,4 @@
-from datetime import date, datetime, timedelta
-import re
+from datetime import date
 
 from aiogram import F, Router
 from aiogram.filters import StateFilter
@@ -9,6 +8,7 @@ from aiogram.types import Message
 
 from database import get_connection
 from keyboards.main import CANCEL_TEXT, MAIN_MENU_TEXTS, cancel_kb, date_choice_kb, main_menu_kb, skip_comment_kb
+from services.dates import parse_transaction_date
 from services.reports import build_dashboard
 
 router = Router()
@@ -30,22 +30,7 @@ def parse_money(raw: str) -> float:
 
 
 def parse_date_ru(raw: str) -> date:
-    text = raw.strip().lower()
-    if text == "сегодня":
-        return date.today()
-    if text == "завтра":
-        return date.today() + timedelta(days=1)
-    m = re.fullmatch(r"через\s+(\d+)\s+дн(?:я|ей)?", text)
-    if m:
-        return date.today() + timedelta(days=int(m.group(1)))
-    try:
-        return datetime.strptime(text, "%d.%m.%Y").date()
-    except ValueError:
-        pass
-    dm = datetime.strptime(text, "%d.%m").date().replace(year=date.today().year)
-    if dm < date.today():
-        dm = dm.replace(year=dm.year + 1)
-    return dm
+    return parse_transaction_date(raw)
 
 
 async def _back_to_home(message: Message, state: FSMContext):
