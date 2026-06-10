@@ -1,7 +1,6 @@
 import asyncio
 import logging
-import re
-from datetime import date, datetime, timedelta
+from datetime import date
 
 from aiogram import Bot, F, Router
 from aiogram.filters import StateFilter
@@ -23,6 +22,7 @@ from keyboards.main import (
     recurring_type_kb,
     skip_comment_kb,
 )
+from services.dates import parse_future_date
 from services.recurring_payments import (
     deactivate_recurring_operation,
     fetch_active_recurring_operation,
@@ -88,22 +88,7 @@ def parse_money(raw: str) -> float:
 
 
 def parse_flexible_date(raw: str) -> date:
-    text = raw.strip().lower()
-    if text == "сегодня":
-        return date.today()
-    if text == "завтра":
-        return date.today() + timedelta(days=1)
-    m = re.fullmatch(r"через\s+(\d+)\s+дн(?:я|ей)?", text)
-    if m:
-        return date.today() + timedelta(days=int(m.group(1)))
-    try:
-        return datetime.strptime(text, "%d.%m.%Y").date()
-    except ValueError:
-        pass
-    dm = datetime.strptime(text, "%d.%m").date().replace(year=date.today().year)
-    if dm < date.today():
-        dm = dm.replace(year=dm.year + 1)
-    return dm
+    return parse_future_date(raw)
 
 
 async def _back_to_home(message: Message, state: FSMContext):
