@@ -4,10 +4,20 @@ from aiogram import F, Router
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 
 from database import get_connection
-from keyboards.main import CANCEL_TEXT, MAIN_MENU_TEXTS, cancel_kb, date_choice_kb, main_menu_kb, skip_comment_kb
+from keyboards.main import (
+    BACK_TEXT,
+    CANCEL_TEXT,
+    MAIN_MENU_TEXTS,
+    calendar_back_kb,
+    calendar_kb,
+    cancel_kb,
+    date_choice_kb,
+    main_menu_kb,
+    skip_comment_kb,
+)
 from services.dates import parse_transaction_date
 from services.reports import build_dashboard
 
@@ -41,6 +51,14 @@ async def _back_to_home(message: Message, state: FSMContext):
 
 @router.message(F.text == CANCEL_TEXT)
 async def cancel_any(message: Message, state: FSMContext):
+    await _back_to_home(message, state)
+
+
+@router.message(F.text == BACK_TEXT)
+async def back_any(message: Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state is None:
+        return
     await _back_to_home(message, state)
 
 
@@ -106,10 +124,58 @@ async def transaction_date_choice(message: Message, state: FSMContext):
         await message.answer("Введите комментарий или нажмите «Пропустить».", reply_markup=skip_comment_kb())
         return
     if message.text == "Ввести дату":
+        today = date.today()
         await state.set_state(TransactionStates.waiting_manual_date)
-        await message.answer("Введите дату: завтра, через 10 дней, 10.06 или 10.06.2026", reply_markup=cancel_kb())
+        await message.answer(
+            "Выберите дату в календаре или введите вручную: завтра, через 10 дней, 10.06 или 10.06.2026",
+            reply_markup=calendar_back_kb(),
+        )
+        await message.answer("Календарь операций:", reply_markup=calendar_kb("tx", today.year, today.month))
         return
     await message.answer("Выберите: «Сегодня» или «Ввести дату».")
+
+
+@router.callback_query(F.data.startswith("cal:tx:"))
+async def transaction_calendar(callback: CallbackQuery, state: FSMContext):
+    parts = callback.data.split(":")
+    try:
+        _, _, action, year_raw, month_raw, day_raw = parts
+        year = int(year_raw)
+        month = int(month_raw)
+        day = int(day_raw)
+    except (ValueError, IndexError):
+        await callback.answer("Не понял дату", show_alert=True)
+        return
+
+    if action == "noop":
+        await callback.answer()
+        return
+
+    if action == "month":
+        if callback.message:
+            await callback.message.edit_reply_markup(reply_markup=calendar_kb("tx", year, month))
+        await callback.answer()
+        return
+
+    if action != "select":
+        await callback.answer()
+        return
+
+    try:
+        op_date = date(year, month, day)
+    except ValueError:
+        await callback.answer("Не понял дату", show_alert=True)
+        return
+
+    await state.update_data(operation_date=op_date.isoformat())
+    await state.set_state(TransactionStates.waiting_comment)
+    if callback.message:
+        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.message.answer(
+            f"Дата операции: {op_date.strftime('%d.%m.%Y')}\nВведите комментарий или нажмите «Пропустить».",
+            reply_markup=skip_comment_kb(),
+        )
+    await callback.answer("Дата выбрана")
 
 
 @router.message(TransactionStates.waiting_manual_date)
