@@ -1,6 +1,9 @@
+import calendar
+
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
 CANCEL_TEXT = "❌ Отмена"
+BACK_TEXT = "⬅️ Назад"
 MAIN_MENU_TEXTS = {
     "💼 Главный экран",
     "➕ Доход",
@@ -9,6 +12,87 @@ MAIN_MENU_TEXTS = {
     "➕ Добавить платеж",
     "📊 Отчёт",
 }
+
+
+def calendar_back_kb() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=BACK_TEXT)]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+
+
+MONTH_NAMES = {
+    1: "Январь",
+    2: "Февраль",
+    3: "Март",
+    4: "Апрель",
+    5: "Май",
+    6: "Июнь",
+    7: "Июль",
+    8: "Август",
+    9: "Сентябрь",
+    10: "Октябрь",
+    11: "Ноябрь",
+    12: "Декабрь",
+}
+WEEKDAY_NAMES = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+
+
+def _calendar_callback(prefix: str, action: str, year: int, month: int, day: int = 0) -> str:
+    return f"cal:{prefix}:{action}:{year}:{month}:{day}"
+
+
+def calendar_kb(prefix: str, year: int, month: int) -> InlineKeyboardMarkup:
+    previous_year, previous_month = (year - 1, 12) if month == 1 else (year, month - 1)
+    next_year, next_month = (year + 1, 1) if month == 12 else (year, month + 1)
+
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"{MONTH_NAMES[month]} {year}",
+                callback_data=_calendar_callback(prefix, "noop", year, month),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=weekday,
+                callback_data=_calendar_callback(prefix, "noop", year, month),
+            )
+            for weekday in WEEKDAY_NAMES
+        ],
+    ]
+
+    for week in calendar.Calendar(firstweekday=0).monthdayscalendar(year, month):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=str(day) if day else " ",
+                    callback_data=_calendar_callback(
+                        prefix,
+                        "select" if day else "noop",
+                        year,
+                        month,
+                        day,
+                    ),
+                )
+                for day in week
+            ]
+        )
+
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="◀️",
+                callback_data=_calendar_callback(prefix, "month", previous_year, previous_month),
+            ),
+            InlineKeyboardButton(
+                text="▶️",
+                callback_data=_calendar_callback(prefix, "month", next_year, next_month),
+            ),
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def main_menu_kb() -> ReplyKeyboardMarkup:
