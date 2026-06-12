@@ -19,6 +19,13 @@ class CalendarKeyboardTest(unittest.TestCase):
         self.assertIn("▶️", button_texts)
         self.assertNotIn("Закрыть", button_texts)
 
+    def test_calendar_inline_keyboard_marks_event_days(self):
+        keyboard = calendar_kb("events", 2026, 6, marked_days={12})
+        button_texts = [button.text for row in keyboard.inline_keyboard for button in row]
+
+        self.assertIn("• 12", button_texts)
+        self.assertNotIn("12", button_texts)
+
 
 if __name__ == "__main__":
     unittest.main()

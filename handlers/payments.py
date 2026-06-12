@@ -25,6 +25,11 @@ from keyboards.main import (
     recurring_type_kb,
     skip_comment_kb,
 )
+from services.calendar_events import (
+    build_calendar_day_events,
+    fetch_calendar_day_events,
+    fetch_calendar_marked_days,
+)
 from services.dates import parse_future_date
 from services.recurring_payments import (
     deactivate_recurring_operation,
@@ -99,6 +104,11 @@ async def _back_to_home(message: Message, state: FSMContext):
     unpaid_operations = fetch_unpaid_today_recurring_payments()
     await message.answer(build_dashboard(), reply_markup=recurring_due_kb(unpaid_operations))
     await message.answer("Главное меню:", reply_markup=main_menu_kb())
+
+
+def calendar_events_kb(year: int, month: int):
+    marked_days = fetch_calendar_marked_days(year, month)
+    return calendar_kb("events", year, month, marked_days)
 
 
 def build_recurring_operations_section(operations) -> str:
@@ -187,6 +197,54 @@ async def back_any(message: Message, state: FSMContext):
 )
 async def menu_during_fsm(message: Message, state: FSMContext):
     await state.clear()
+
+
+@router.message(F.text == "📅 Календарь")
+async def calendar_events_start(message: Message, state: FSMContext):
+    await state.clear()
+    today = date.today()
+    await message.answer(
+        "📅 Календарь событий. Дни с событиями отмечены точкой. Выберите дату, чтобы посмотреть детали.",
+        reply_markup=main_menu_kb(),
+    )
+    await message.answer("Календарь:", reply_markup=calendar_events_kb(today.year, today.month))
+
+
+@router.callback_query(F.data.startswith("cal:events:"))
+async def calendar_events(callback: CallbackQuery):
+    parts = callback.data.split(":")
+    try:
+        _, _, action, year_raw, month_raw, day_raw = parts
+        year = int(year_raw)
+        month = int(month_raw)
+        day = int(day_raw)
+    except (ValueError, IndexError):
+        await callback.answer("Не понял дату", show_alert=True)
+        return
+
+    if action == "noop":
+        await callback.answer()
+        return
+
+    if action == "month":
+        if callback.message:
+            await callback.message.edit_reply_markup(reply_markup=calendar_events_kb(year, month))
+        await callback.answer()
+        return
+
+    if action != "select":
+        await callback.answer()
+        return
+
+    try:
+        selected_date = date(year, month, day)
+    except ValueError:
+        await callback.answer("Не понял дату", show_alert=True)
+        return
+
+    events = fetch_calendar_day_events(selected_date)
+    await send_callback_message(callback, build_calendar_day_events(selected_date, events), reply_markup=main_menu_kb())
+    await callback.answer("События загружены")
 
 
 @router.message(F.text == "📅 Предстоящий платёж")

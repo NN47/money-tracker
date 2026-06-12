@@ -10,6 +10,7 @@ MAIN_MENU_TEXTS = {
     "➖ Расход",
     "🔁 Регулярные платежи",
     "➕ Добавить платеж",
+    "📅 Календарь",
     "📊 Отчёт",
 }
 
@@ -43,7 +44,8 @@ def _calendar_callback(prefix: str, action: str, year: int, month: int, day: int
     return f"cal:{prefix}:{action}:{year}:{month}:{day}"
 
 
-def calendar_kb(prefix: str, year: int, month: int) -> InlineKeyboardMarkup:
+def calendar_kb(prefix: str, year: int, month: int, marked_days: set[int] | None = None) -> InlineKeyboardMarkup:
+    marked_days = marked_days or set()
     previous_year, previous_month = (year - 1, 12) if month == 1 else (year, month - 1)
     next_year, next_month = (year + 1, 1) if month == 12 else (year, month + 1)
 
@@ -67,7 +69,7 @@ def calendar_kb(prefix: str, year: int, month: int) -> InlineKeyboardMarkup:
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=str(day) if day else " ",
+                    text=(f"• {day}" if day in marked_days else str(day)) if day else " ",
                     callback_data=_calendar_callback(
                         prefix,
                         "select" if day else "noop",
@@ -101,6 +103,7 @@ def main_menu_kb() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="💼 Главный экран")],
             [KeyboardButton(text="➕ Доход"), KeyboardButton(text="➖ Расход")],
             [KeyboardButton(text="🔁 Регулярные платежи")],
+            [KeyboardButton(text="📅 Календарь")],
             [KeyboardButton(text="📊 Отчёт")],
         ],
         resize_keyboard=True,
