@@ -91,7 +91,12 @@ async def report(message: Message, state: FSMContext):
 @router.message(F.text == "📋 Все операции")
 async def all_transactions(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer(build_transactions_report(limit=50), parse_mode="HTML")
+    transactions = fetch_recent_transactions(limit=50)
+    await message.answer(
+        build_transactions_report(transactions=transactions),
+        reply_markup=report_transactions_kb(transactions),
+        parse_mode="HTML",
+    )
 
 
 @router.message(F.text == BACK_TEXT)

@@ -134,10 +134,10 @@ def build_summary_report(transactions=None) -> str:
     return "\n".join(lines)
 
 
-def build_transactions_report(limit: int = 50) -> str:
+def build_transactions_report(limit: int = 50, transactions=None) -> str:
     today = date.today()
     start, nxt = month_bounds(today)
-    tx = fetch_recent_transactions(limit=limit)
+    tx = fetch_recent_transactions(limit=limit) if transactions is None else transactions
     lines = ["📋 <b>Все операции</b>", ""]
     if not tx:
         lines.append("Операций пока нет")
