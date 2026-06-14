@@ -218,3 +218,53 @@ def recurring_due_kb(operations) -> InlineKeyboardMarkup | None:
 
 def cancel_kb() -> ReplyKeyboardMarkup:
     return with_cancel_kb()
+
+
+def report_menu_kb() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=BACK_TEXT), KeyboardButton(text="📋 Все операции")],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def report_transactions_kb(transactions) -> InlineKeyboardMarkup | None:
+    rows = []
+    for row in transactions:
+        sign = "+" if row["type"] == "income" else "-"
+        amount = f"{float(row['amount']):,.2f}".replace(",", " ")
+        if amount.endswith(".00"):
+            amount = amount[:-3]
+        category = row["category"] or "Без категории"
+        date_text = row["operation_date"].strftime("%d.%m")
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{date_text} {sign}{amount} ₽ — {category}",
+                    callback_data=f"report_tx:{row['id']}",
+                )
+            ]
+        )
+    if not rows:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def report_delete_confirm_kb(transaction_id: int, include_edit: bool = False) -> InlineKeyboardMarkup:
+    rows = []
+    if include_edit:
+        rows.append(
+            [
+                InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"edit_tx:{transaction_id}"),
+                InlineKeyboardButton(text="🗑 Удалить", callback_data=f"delete_tx:{transaction_id}"),
+            ]
+        )
+    else:
+        rows.append(
+            [
+                InlineKeyboardButton(text="Да, удалить", callback_data=f"confirm_delete_tx:{transaction_id}"),
+                InlineKeyboardButton(text="Отмена", callback_data=f"cancel_delete_tx:{transaction_id}"),
+            ]
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
