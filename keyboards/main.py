@@ -268,3 +268,30 @@ def report_delete_confirm_kb(transaction_id: int, include_edit: bool = False) ->
             ]
         )
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def report_edit_fields_kb(transaction_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="💰 Сумма", callback_data=f"edit_tx_field:{transaction_id}:amount"),
+                InlineKeyboardButton(text="📂 Категория", callback_data=f"edit_tx_field:{transaction_id}:category"),
+            ],
+            [
+                InlineKeyboardButton(text="📅 Дата", callback_data=f"edit_tx_field:{transaction_id}:date"),
+                InlineKeyboardButton(text="💬 Комментарий", callback_data=f"edit_tx_field:{transaction_id}:comment"),
+            ],
+            [InlineKeyboardButton(text="↔️ Тип", callback_data=f"edit_tx_field:{transaction_id}:type")],
+        ]
+    )
+
+
+def transaction_type_edit_kb(transaction_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="➕ Доход", callback_data=f"edit_tx_type:{transaction_id}:income"),
+                InlineKeyboardButton(text="➖ Расход", callback_data=f"edit_tx_type:{transaction_id}:expense"),
+            ]
+        ]
+    )
