@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+import html
 
 from database import dict_cursor, get_connection
 from services.recurring_payments import fetch_today_recurring_payments, split_by_payment_status
@@ -79,36 +80,68 @@ def _format_transaction_date(operation_date: date, period_start: date, period_en
     return operation_date.strftime("%d.%m.%Y")
 
 
-def build_summary_report() -> str:
-    today, income, expense, payments, _ = _fetch_main_data()
-    balance = income - expense
+def fetch_recent_transactions(limit: int = 10):
     with get_connection() as conn:
         cur = dict_cursor(conn)
-        cur.execute("SELECT type, amount, category, operation_date FROM transactions ORDER BY operation_date DESC, id DESC LIMIT 10")
+        cur.execute(
+            """
+            SELECT id, type, amount, category, comment, operation_date
+            FROM transactions
+            ORDER BY operation_date DESC, id DESC
+            LIMIT %s
+            """,
+            (limit,),
+        )
         tx = cur.fetchall()
         cur.close()
+    return tx
+
+
+def _format_transaction_line(row, start: date, end: date) -> str:
+    sign = "+" if row["type"] == "income" else "-"
+    tx_date = _format_transaction_date(row["operation_date"], start, end)
+    category = html.escape(row["category"] or "Без категории")
+    comment = f" — {html.escape(row['comment'])}" if row.get("comment") else ""
+    return f"{tx_date} <b>{sign}{money(float(row['amount']))} ₽</b> — {category}{comment}"
+
+
+def build_summary_report(transactions=None) -> str:
+    today, income, expense, payments, _ = _fetch_main_data()
+    balance = income - expense
+    tx = fetch_recent_transactions() if transactions is None else transactions
     start, nxt = month_bounds(today)
     lines = [
-        "📊 Отчёт",
+        "📊 <b>Отчёт</b>",
         "",
-        f"Период: {today.strftime('%m.%Y')}",
-        f"Доходы: {money(income)} ₽",
-        f"Расходы: {money(expense)} ₽",
-        f"Баланс: {money(balance)} ₽",
+        f"<b>Период:</b> {today.strftime('%m.%Y')}",
+        f"<b>Доходы:</b> {money(income)} ₽",
+        f"<b>Расходы:</b> {money(expense)} ₽",
+        f"<b>Баланс:</b> {money(balance)} ₽",
         "",
-        "Последние 10 операций:",
+        "<b>Последние 10 операций:</b>",
     ]
     if tx:
         for row in tx:
-            sign = "+" if row["type"] == "income" else "-"
-            tx_date = _format_transaction_date(row["operation_date"], start, nxt)
-            lines.append(f"{tx_date} {sign}{money(float(row['amount']))} ₽ — {row['category']}")
+            lines.append(_format_transaction_line(row, start, nxt))
     else:
         lines.append("Операций пока нет")
     lines.append("")
-    lines.append(f"Ближайшие платежи на {UPCOMING_PAYMENTS_DAYS} дней:")
+    lines.append(f"<b>Ближайшие платежи на {UPCOMING_PAYMENTS_DAYS} дней:</b>")
     if payments:
-        lines.extend([f"{r['payment_date'].strftime('%d.%m')} — {r['title']} — {money(float(r['amount']))} ₽" for r in payments[:10]])
+        lines.extend([f"{r['payment_date'].strftime('%d.%m')} — {html.escape(r['title'])} — <b>{money(float(r['amount']))} ₽</b>" for r in payments[:10]])
     else:
         lines.append("Нет неоплаченных платежей")
+    return "\n".join(lines)
+
+
+def build_transactions_report(limit: int = 50) -> str:
+    today = date.today()
+    start, nxt = month_bounds(today)
+    tx = fetch_recent_transactions(limit=limit)
+    lines = ["📋 <b>Все операции</b>", ""]
+    if not tx:
+        lines.append("Операций пока нет")
+        return "\n".join(lines)
+    for row in tx:
+        lines.append(_format_transaction_line(row, start, nxt))
     return "\n".join(lines)
