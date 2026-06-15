@@ -1,6 +1,13 @@
 import unittest
 
-from keyboards.main import BACK_TEXT, calendar_back_kb, calendar_kb, recurring_edit_fields_kb, recurring_payments_actions_kb
+from keyboards.main import (
+    BACK_TEXT,
+    calendar_back_kb,
+    calendar_kb,
+    recurring_due_kb,
+    recurring_edit_fields_kb,
+    recurring_payments_actions_kb,
+)
 
 
 class CalendarKeyboardTest(unittest.TestCase):
@@ -33,6 +40,14 @@ class RecurringPaymentsKeyboardTest(unittest.TestCase):
         button_texts = [button.text for row in keyboard.inline_keyboard for button in row]
 
         self.assertEqual(button_texts, ["✏️ Редактировать: Сбер кредит"])
+
+    def test_recurring_due_keyboard_contains_only_paid_buttons(self):
+        keyboard = recurring_due_kb([{"id": 1, "title": "Сбер"}])
+        buttons = [button for row in keyboard.inline_keyboard for button in row]
+
+        self.assertEqual(len(buttons), 1)
+        self.assertEqual(buttons[0].text, "✅ Оплатил: Сбер")
+        self.assertEqual(buttons[0].callback_data, "pay_recurring:1")
 
     def test_recurring_edit_menu_contains_delete_button(self):
         keyboard = recurring_edit_fields_kb(1)

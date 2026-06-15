@@ -269,14 +269,6 @@ def recurring_due_kb(operations) -> InlineKeyboardMarkup | None:
                 )
             ]
         )
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"⏰ Напомнить: {title}",
-                    callback_data=f"remind_recurring:{operation_id}",
-                )
-            ]
-        )
     if not rows:
         return None
     return InlineKeyboardMarkup(inline_keyboard=rows)
