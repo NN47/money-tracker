@@ -124,6 +124,10 @@ def calendar_events_kb(year: int, month: int):
     return calendar_kb("events", year, month, marked_days)
 
 
+def recurring_kind_for_type(op_type: str | None) -> str:
+    return "income" if op_type == "income" else "payment"
+
+
 def build_recurring_operations_section(operations, kind: str = "payment") -> str:
     if not operations:
         if kind == "income":
@@ -599,17 +603,21 @@ async def recurring_edit_type(callback: CallbackQuery):
     if callback.message:
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer("Изменения сохранены ✅")
+        await send_recurring_operations_section(callback.message, kind=recurring_kind_for_type(op_type))
 
 
 async def _save_recurring_edited_field(message: Message, state: FSMContext, field: str, value) -> None:
     data = await state.get_data()
     operation_id = data.get("edit_operation_id")
+    operation_kind = "payment"
     if not operation_id or not _update_recurring_field(operation_id, field, value):
         await message.answer("Этот платёж не найден или уже удалён.")
     else:
+        updated_operation = fetch_active_recurring_operation(operation_id)
+        operation_kind = recurring_kind_for_type(updated_operation["type"] if updated_operation else None)
         await message.answer("Изменения сохранены ✅")
     await state.clear()
-    await send_recurring_operations_section(message)
+    await send_recurring_operations_section(message, kind=operation_kind)
 
 
 @router.message(RecurringEditStates.waiting_title)
@@ -877,7 +885,7 @@ async def recurring_comment(message: Message, state: FSMContext):
         await message.answer("Сохранено ✅")
 
     await state.clear()
-    await send_recurring_operations_section(message)
+    await send_recurring_operations_section(message, kind=recurring_kind_for_type(data.get("type")))
 
 
 @router.message(F.text == "📅 Ближайшие платежи")
