@@ -15,11 +15,13 @@ from keyboards.main import (
     calendar_kb,
     cancel_kb,
     date_choice_kb,
+    dashboard_actions_kb,
     main_menu_kb,
+    section_menu_kb,
     skip_comment_kb,
 )
 from services.dates import parse_transaction_date
-from services.reports import build_dashboard
+from services.reports import build_dashboard, build_summary_report, fetch_recent_transactions
 
 router = Router()
 
@@ -45,7 +47,7 @@ def parse_date_ru(raw: str) -> date:
 
 async def _back_to_home(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer(build_dashboard())
+    await message.answer(build_dashboard(), reply_markup=dashboard_actions_kb())
     await message.answer("Главное меню:", reply_markup=main_menu_kb())
 
 
@@ -89,14 +91,39 @@ async def _start_transaction(message: Message, state: FSMContext, tx_type: str):
     await message.answer("Введите сумму операции:", reply_markup=cancel_kb())
 
 
-@router.message(F.text == "➕ Доход")
+@router.message(F.text == "💰 Доходы")
+async def income_section(message: Message, state: FSMContext):
+    await state.clear()
+    transactions = fetch_recent_transactions(tx_type="income")
+    await message.answer(build_summary_report(transactions=transactions, tx_type="income"), reply_markup=section_menu_kb("income"), parse_mode="HTML")
+
+
+@router.message(F.text == "💸 Расходы")
+async def expense_section(message: Message, state: FSMContext):
+    await state.clear()
+    transactions = fetch_recent_transactions(tx_type="expense")
+    await message.answer(build_summary_report(transactions=transactions, tx_type="expense"), reply_markup=section_menu_kb("expense"), parse_mode="HTML")
+
+
+@router.message(F.text.in_({"➕ Доход", "➕ Добавить доход"}))
 async def add_income(message: Message, state: FSMContext):
     await _start_transaction(message, state, "income")
 
 
-@router.message(F.text == "➖ Расход")
+@router.message(F.text.in_({"➖ Расход", "➖ Добавить расход"}))
 async def add_expense(message: Message, state: FSMContext):
     await _start_transaction(message, state, "expense")
+
+
+@router.callback_query(F.data.startswith("quick_tx:"))
+async def quick_transaction(callback: CallbackQuery, state: FSMContext):
+    tx_type = callback.data.split(":", maxsplit=1)[1]
+    if tx_type not in {"income", "expense"}:
+        await callback.answer("Не понял тип операции", show_alert=True)
+        return
+    await callback.answer()
+    if callback.message:
+        await _start_transaction(callback.message, state, tx_type)
 
 
 @router.message(TransactionStates.waiting_amount)

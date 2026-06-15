@@ -16,6 +16,7 @@ from keyboards.main import (
     calendar_back_kb,
     calendar_kb,
     cancel_kb,
+    dashboard_actions_kb,
     main_menu_kb,
     payment_done_kb,
     recurring_delete_confirm_kb,
@@ -112,7 +113,9 @@ def parse_flexible_date(raw: str) -> date:
 async def _back_to_home(message: Message, state: FSMContext):
     await state.clear()
     unpaid_operations = fetch_unpaid_today_recurring_payments()
-    await message.answer(build_dashboard(), reply_markup=recurring_due_kb(unpaid_operations))
+    due_kb = recurring_due_kb(unpaid_operations)
+    extra_rows = due_kb.inline_keyboard if due_kb else None
+    await message.answer(build_dashboard(), reply_markup=dashboard_actions_kb(extra_rows))
     await message.answer("Главное меню:", reply_markup=main_menu_kb())
 
 
@@ -121,8 +124,10 @@ def calendar_events_kb(year: int, month: int):
     return calendar_kb("events", year, month, marked_days)
 
 
-def build_recurring_operations_section(operations) -> str:
+def build_recurring_operations_section(operations, kind: str = "payment") -> str:
     if not operations:
+        if kind == "income":
+            return "Регулярные доходы пока не добавлены. Нажмите «➕ Добавить регулярный доход», чтобы создать первый."
         return "Регулярные платежи пока не добавлены. Нажмите «➕ Добавить платеж», чтобы создать первый."
 
     type_labels = {
@@ -130,7 +135,7 @@ def build_recurring_operations_section(operations) -> str:
         "expense": "расход",
         "payment": "платёж",
     }
-    lines = ["🔁 Регулярные платежи:"]
+    lines = ["🔁 Регулярные доходы:" if kind == "income" else "🔁 Регулярные платежи:"]
     for operation in operations:
         day = operation["day_of_month"]
         day_text = f"{day} число" if day else "без даты"
@@ -143,13 +148,18 @@ def build_recurring_operations_section(operations) -> str:
     return "\n".join(lines)
 
 
-async def send_recurring_operations_section(message: Message) -> None:
+async def send_recurring_operations_section(message: Message, kind: str = "payment") -> None:
     operations = fetch_all_active_recurring_operations()
+    if kind == "income":
+        operations = [row for row in operations if row["type"] == "income"]
+    else:
+        operations = [row for row in operations if row["type"] in {"expense", "payment"}]
     await message.answer(
-        build_recurring_operations_section(operations),
+        build_recurring_operations_section(operations, kind=kind),
         reply_markup=recurring_payments_actions_kb(operations),
     )
-    await message.answer("Меню регулярных платежей:", reply_markup=recurring_payments_menu_kb())
+    menu_title = "Меню регулярных доходов:" if kind == "income" else "Меню регулярных платежей:"
+    await message.answer(menu_title, reply_markup=recurring_payments_menu_kb(kind))
 
 
 def build_recurring_payment_notification(operations) -> str:
@@ -710,7 +720,21 @@ async def recurring_delete_confirm(callback: CallbackQuery):
 @router.message(F.text == "🔁 Регулярные платежи")
 async def recurring_payments_section(message: Message, state: FSMContext):
     await state.clear()
-    await send_recurring_operations_section(message)
+    await send_recurring_operations_section(message, kind="payment")
+
+
+@router.message(F.text == "🔁 Регулярные доходы")
+async def recurring_incomes_section(message: Message, state: FSMContext):
+    await state.clear()
+    await send_recurring_operations_section(message, kind="income")
+
+
+@router.message(F.text == "➕ Добавить регулярный доход")
+async def recurring_income_start(message: Message, state: FSMContext):
+    await state.clear()
+    await state.update_data(type="income")
+    await state.set_state(RecurringStates.waiting_title)
+    await message.answer("Введите название:", reply_markup=cancel_kb())
 
 
 @router.message(F.text == "➕ Добавить платеж")
