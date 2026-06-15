@@ -123,17 +123,41 @@ def recurring_payments_actions_kb(operations) -> InlineKeyboardMarkup | None:
                 )
             ]
         )
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"🗑 Удалить: {title}",
-                    callback_data=f"delete_recurring:{operation_id}",
-                )
-            ]
-        )
     if not rows:
         return None
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def recurring_edit_fields_kb(operation_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="💰 Сумма", callback_data=f"edit_recurring_field:{operation_id}:amount"),
+                InlineKeyboardButton(text="📂 Категория", callback_data=f"edit_recurring_field:{operation_id}:category"),
+            ],
+            [
+                InlineKeyboardButton(text="📝 Название", callback_data=f"edit_recurring_field:{operation_id}:title"),
+                InlineKeyboardButton(text="📅 День", callback_data=f"edit_recurring_field:{operation_id}:day"),
+            ],
+            [
+                InlineKeyboardButton(text="💬 Комментарий", callback_data=f"edit_recurring_field:{operation_id}:comment"),
+                InlineKeyboardButton(text="↔️ Тип", callback_data=f"edit_recurring_field:{operation_id}:type"),
+            ],
+            [InlineKeyboardButton(text="🗑 Удалить", callback_data=f"delete_recurring:{operation_id}")],
+        ]
+    )
+
+
+def recurring_type_edit_kb(operation_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="➕ Доход", callback_data=f"edit_recurring_type:{operation_id}:income"),
+                InlineKeyboardButton(text="➖ Расход", callback_data=f"edit_recurring_type:{operation_id}:expense"),
+            ],
+            [InlineKeyboardButton(text="💳 Платёж", callback_data=f"edit_recurring_type:{operation_id}:payment")],
+        ]
+    )
 
 
 def recurring_delete_confirm_kb(operation_id: int) -> InlineKeyboardMarkup:
