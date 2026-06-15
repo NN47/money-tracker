@@ -172,11 +172,22 @@ async def cancel_any(message: Message, state: FSMContext):
     await _back_to_home(message, state)
 
 
-@router.message(F.text == BACK_TEXT)
+@router.message(
+    StateFilter(
+        ScheduledPaymentStates.waiting_title,
+        ScheduledPaymentStates.waiting_amount,
+        ScheduledPaymentStates.waiting_date,
+        ScheduledPaymentStates.waiting_comment,
+        RecurringStates.waiting_type,
+        RecurringStates.waiting_title,
+        RecurringStates.waiting_amount,
+        RecurringStates.waiting_day,
+        RecurringStates.waiting_category,
+        RecurringStates.waiting_comment,
+    ),
+    F.text == BACK_TEXT,
+)
 async def back_any(message: Message, state: FSMContext):
-    current_state = await state.get_state()
-    if current_state is None:
-        return
     await _back_to_home(message, state)
 
 
