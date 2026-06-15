@@ -20,7 +20,7 @@ def month_bounds(year: int, month: int) -> tuple[date, date]:
     return start, date(year, month + 1, 1)
 
 
-def fetch_calendar_marked_days(year: int, month: int) -> set[int]:
+def fetch_calendar_marked_days(year: int, month: int) -> dict[int, str]:
     start, end = month_bounds(year, month)
     _, days_in_month = monthrange(year, month)
 
@@ -39,14 +39,25 @@ def fetch_calendar_marked_days(year: int, month: int) -> set[int]:
 
         cur.execute(
             """
-            SELECT DISTINCT EXTRACT(DAY FROM operation_date)::int AS day
+            SELECT
+                EXTRACT(DAY FROM operation_date)::int AS day,
+                BOOL_OR(type = 'income') AS has_income,
+                BOOL_OR(type = 'expense') AS has_expense
             FROM transactions
             WHERE operation_date >= %s
               AND operation_date < %s
+            GROUP BY day
             """,
             (start, end),
         )
-        transaction_days = {row["day"] for row in cur.fetchall()}
+        transaction_marks = {}
+        for row in cur.fetchall():
+            if row["has_income"] and row["has_expense"]:
+                transaction_marks[row["day"]] = "±"
+            elif row["has_income"]:
+                transaction_marks[row["day"]] = "+"
+            elif row["has_expense"]:
+                transaction_marks[row["day"]] = "-"
 
         cur.execute(
             """
@@ -60,7 +71,10 @@ def fetch_calendar_marked_days(year: int, month: int) -> set[int]:
         recurring_days = {row["day"] for row in cur.fetchall()}
         cur.close()
 
-    return scheduled_days | transaction_days | recurring_days
+    event_days = scheduled_days | recurring_days
+    marks = {day: "•" for day in event_days}
+    marks.update(transaction_marks)
+    return marks
 
 
 def fetch_calendar_day_events(day: date) -> dict[str, list]:
