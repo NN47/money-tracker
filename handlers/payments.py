@@ -20,8 +20,10 @@ from keyboards.main import (
     payment_done_kb,
     recurring_delete_confirm_kb,
     recurring_due_kb,
+    recurring_edit_fields_kb,
     recurring_payments_actions_kb,
     recurring_payments_menu_kb,
+    recurring_type_edit_kb,
     recurring_type_kb,
     skip_comment_kb,
 )
@@ -62,6 +64,14 @@ class ScheduledPaymentStates(StatesGroup):
 
 class RecurringStates(StatesGroup):
     waiting_type = State()
+    waiting_title = State()
+    waiting_amount = State()
+    waiting_day = State()
+    waiting_category = State()
+    waiting_comment = State()
+
+
+class RecurringEditStates(StatesGroup):
     waiting_title = State()
     waiting_amount = State()
     waiting_day = State()
@@ -184,6 +194,11 @@ async def cancel_any(message: Message, state: FSMContext):
         RecurringStates.waiting_day,
         RecurringStates.waiting_category,
         RecurringStates.waiting_comment,
+        RecurringEditStates.waiting_title,
+        RecurringEditStates.waiting_amount,
+        RecurringEditStates.waiting_day,
+        RecurringEditStates.waiting_category,
+        RecurringEditStates.waiting_comment,
     ),
     F.text == BACK_TEXT,
 )
@@ -203,6 +218,11 @@ async def back_any(message: Message, state: FSMContext):
         RecurringStates.waiting_day,
         RecurringStates.waiting_category,
         RecurringStates.waiting_comment,
+        RecurringEditStates.waiting_title,
+        RecurringEditStates.waiting_amount,
+        RecurringEditStates.waiting_day,
+        RecurringEditStates.waiting_category,
+        RecurringEditStates.waiting_comment,
     ),
     F.text.in_(MAIN_MENU_TEXTS),
 )
@@ -458,15 +478,174 @@ async def recurring_edit_start(callback: CallbackQuery, state: FSMContext):
         return
 
     await state.clear()
-    await state.update_data(edit_operation_id=operation_id)
-    await state.set_state(RecurringStates.waiting_type)
     await callback.answer("Редактируем платёж")
     await remove_inline_keyboard(callback)
     await send_callback_message(
         callback,
-        f"Редактируем «{operation['title']}». Выберите новый тип операции:",
-        reply_markup=recurring_type_kb(),
+        f"Редактируем регулярный платёж «{operation['title']}».\nЧто хотите изменить?",
+        reply_markup=recurring_edit_fields_kb(operation_id),
     )
+
+
+RECURRING_EDIT_FIELD_PROMPTS = {
+    "title": "Введите новое название:",
+    "amount": "Введите новую сумму:",
+    "day": "Введите новый день месяца (1-31):",
+    "category": "Введите новую категорию:",
+    "comment": "Введите новый комментарий или «Пропустить».",
+}
+
+RECURRING_EDIT_FIELD_STATES = {
+    "title": RecurringEditStates.waiting_title,
+    "amount": RecurringEditStates.waiting_amount,
+    "day": RecurringEditStates.waiting_day,
+    "category": RecurringEditStates.waiting_category,
+    "comment": RecurringEditStates.waiting_comment,
+}
+
+
+def _update_recurring_field(operation_id: int, field: str, value) -> bool:
+    operation = fetch_active_recurring_operation(operation_id)
+    if not operation:
+        return False
+
+    title = operation["title"]
+    op_type = operation["type"]
+    amount = float(operation["amount"])
+    category = operation["category"]
+    day_of_month = operation["day_of_month"]
+    comment = operation["comment"]
+
+    if field == "title":
+        title = value
+    elif field == "type":
+        op_type = value
+    elif field == "amount":
+        amount = value
+    elif field == "category":
+        category = value
+    elif field == "day":
+        day_of_month = value
+    elif field == "comment":
+        comment = value
+    else:
+        return False
+
+    return update_recurring_operation(operation_id, title, op_type, amount, category, day_of_month, comment)
+
+
+@router.callback_query(F.data.startswith("edit_recurring_field:"))
+async def recurring_edit_field(callback: CallbackQuery, state: FSMContext):
+    try:
+        _, operation_id_raw, field = callback.data.split(":", maxsplit=2)
+        operation_id = int(operation_id_raw)
+    except (AttributeError, ValueError):
+        await callback.answer("Не понял, что редактировать", show_alert=True)
+        return
+
+    if not fetch_active_recurring_operation(operation_id):
+        await callback.answer("Этот платёж не найден или уже удалён", show_alert=True)
+        return
+
+    if field == "type":
+        await state.clear()
+        await callback.answer("Выберите тип")
+        if callback.message:
+            await callback.message.edit_reply_markup(reply_markup=None)
+            await callback.message.answer("Выберите новый тип операции:", reply_markup=recurring_type_edit_kb(operation_id))
+        return
+
+    if field not in RECURRING_EDIT_FIELD_STATES:
+        await callback.answer("Такое поле нельзя изменить", show_alert=True)
+        return
+
+    await state.clear()
+    await state.update_data(edit_operation_id=operation_id, edit_field=field)
+    await state.set_state(RECURRING_EDIT_FIELD_STATES[field])
+    await callback.answer("Введите новое значение")
+    if callback.message:
+        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.message.answer(RECURRING_EDIT_FIELD_PROMPTS[field])
+
+
+@router.callback_query(F.data.startswith("edit_recurring_type:"))
+async def recurring_edit_type(callback: CallbackQuery):
+    try:
+        _, operation_id_raw, op_type = callback.data.split(":", maxsplit=2)
+        operation_id = int(operation_id_raw)
+    except (AttributeError, ValueError):
+        await callback.answer("Не понял тип платежа", show_alert=True)
+        return
+
+    if op_type not in {"income", "expense", "payment"}:
+        await callback.answer("Не понял тип платежа", show_alert=True)
+        return
+
+    if not _update_recurring_field(operation_id, "type", op_type):
+        await callback.answer("Платёж не найден", show_alert=True)
+        return
+
+    await callback.answer("Тип сохранён")
+    if callback.message:
+        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.message.answer("Изменения сохранены ✅")
+
+
+async def _save_recurring_edited_field(message: Message, state: FSMContext, field: str, value) -> None:
+    data = await state.get_data()
+    operation_id = data.get("edit_operation_id")
+    if not operation_id or not _update_recurring_field(operation_id, field, value):
+        await message.answer("Этот платёж не найден или уже удалён.")
+    else:
+        await message.answer("Изменения сохранены ✅")
+    await state.clear()
+    await send_recurring_operations_section(message)
+
+
+@router.message(RecurringEditStates.waiting_title)
+async def recurring_edit_title(message: Message, state: FSMContext):
+    title = message.text.strip()
+    if not title:
+        await message.answer("Название не может быть пустым.")
+        return
+    await _save_recurring_edited_field(message, state, "title", title)
+
+
+@router.message(RecurringEditStates.waiting_amount)
+async def recurring_edit_amount(message: Message, state: FSMContext):
+    try:
+        amount = parse_money(message.text)
+    except Exception:
+        await message.answer("Введите корректную сумму больше 0.")
+        return
+    await _save_recurring_edited_field(message, state, "amount", amount)
+
+
+@router.message(RecurringEditStates.waiting_day)
+async def recurring_edit_day(message: Message, state: FSMContext):
+    try:
+        day = int(message.text)
+        if day < 1 or day > 31:
+            raise ValueError
+    except Exception:
+        await message.answer("Введите число от 1 до 31.")
+        return
+    await _save_recurring_edited_field(message, state, "day", day)
+
+
+@router.message(RecurringEditStates.waiting_category)
+async def recurring_edit_category(message: Message, state: FSMContext):
+    category = message.text.strip()
+    if not category:
+        await message.answer("Категория не может быть пустой.")
+        return
+    await _save_recurring_edited_field(message, state, "category", category)
+
+
+@router.message(RecurringEditStates.waiting_comment)
+async def recurring_edit_comment(message: Message, state: FSMContext):
+    comment = None if message.text == "Пропустить" else message.text.strip()
+    await _save_recurring_edited_field(message, state, "comment", comment)
 
 
 @router.callback_query(F.data.startswith("delete_recurring:"))
