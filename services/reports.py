@@ -7,6 +7,25 @@ from services.recurring_payments import fetch_today_recurring_payments, moscow_t
 
 UPCOMING_PAYMENTS_DAYS = 10
 
+RUSSIAN_MONTHS = {
+    1: "январь",
+    2: "февраль",
+    3: "март",
+    4: "апрель",
+    5: "май",
+    6: "июнь",
+    7: "июль",
+    8: "август",
+    9: "сентябрь",
+    10: "октябрь",
+    11: "ноябрь",
+    12: "декабрь",
+}
+
+
+def format_russian_month_year(value: date) -> str:
+    return f"{RUSSIAN_MONTHS[value.month].capitalize()} {value.year}"
+
 
 def money(value: float) -> str:
     formatted = f"{value:,.2f}".replace(",", " ")
@@ -85,29 +104,29 @@ def build_dashboard() -> str:
     lines = [
         "💼 Главный экран",
         "",
-        f"📊 {today.strftime('%B %Y').capitalize()}",
-        f"Доходы: {money(income)} ₽",
-        f"Расходы: {money(expense)} ₽",
-        f"Баланс: {money(balance)} ₽",
+        f"📊 <b>{format_russian_month_year(today)}</b>",
+        f"<b>Доходы:</b> <b>{money(income)} ₽</b>",
+        f"<b>Расходы:</b> <b>{money(expense)} ₽</b>",
+        f"<b>Баланс:</b> <b>{money(balance)} ₽</b>",
     ]
     if unpaid_today:
         lines.extend(["", "🔥 Сегодня к оплате:"])
-        lines.extend([f"• {r['title']} — {money(float(r['amount']))} ₽" for r in unpaid_today])
+        lines.extend([f"• {html.escape(r['title'])} — <b>{money(float(r['amount']))} ₽</b>" for r in unpaid_today])
     if paid_today:
         lines.extend(["", "✅ Сегодня оплачено:"])
-        lines.extend([f"• {r['title']} — {money(float(r['amount']))} ₽" for r in paid_today])
+        lines.extend([f"• {html.escape(r['title'])} — <b>{money(float(r['amount']))} ₽</b>" for r in paid_today])
     lines.extend(["", "📅 Ближайшие платежи:"])
     upcoming_payments = sorted([*payments, *recurring], key=lambda row: (row["payment_date"], row["id"]))[:10]
     if upcoming_payments:
         for r in upcoming_payments:
             recurring_mark = " 🔁" if "day_of_month" in r else ""
-            lines.append(f"{r['payment_date'].strftime('%d.%m')} — {r['title']} — {money(float(r['amount']))} ₽{recurring_mark}")
+            lines.append(f"{r['payment_date'].strftime('%d.%m')} — {html.escape(r['title'])} — <b>{money(float(r['amount']))} ₽</b>{recurring_mark}")
     else:
         lines.append(f"Нет неоплаченных платежей на {UPCOMING_PAYMENTS_DAYS} дней")
     lines.append("")
     lines.append("🔁 Постоянные операции:")
     if active_recurring:
-        lines.extend([f"{r['day_of_month']} число — {r['title']} — {money(float(r['amount']))} ₽" for r in active_recurring])
+        lines.extend([f"{r['day_of_month']} число — {html.escape(r['title'])} — <b>{money(float(r['amount']))} ₽</b>" for r in active_recurring])
     else:
         lines.append("Нет активных постоянных операций")
     return "\n".join(lines)
@@ -172,7 +191,7 @@ def build_summary_report(transactions=None, tx_type: str | None = None) -> str:
             f"<b>Баланс:</b> {money(balance)} ₽",
         ]
         recent_title = "<b>Последние 10 операций:</b>"
-    lines = [title, "", f"<b>Период:</b> {today.strftime('%m.%Y')}", *total_lines, "", recent_title]
+    lines = [title, "", f"<b>Период:</b> {format_russian_month_year(today)}", *total_lines, "", recent_title]
     if tx:
         for row in tx:
             lines.append(_format_transaction_line(row, start, nxt))

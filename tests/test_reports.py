@@ -1,7 +1,12 @@
 from datetime import date
 import unittest
 
-from services.reports import _next_recurring_date, upcoming_recurring_payments
+from services.reports import _next_recurring_date, format_russian_month_year, upcoming_recurring_payments
+
+
+class RussianMonthFormattingTest(unittest.TestCase):
+    def test_formats_june_in_russian(self):
+        self.assertEqual(format_russian_month_year(date(2026, 6, 15)), "Июнь 2026")
 
 
 class UpcomingRecurringPaymentsTest(unittest.TestCase):
