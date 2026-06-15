@@ -52,8 +52,14 @@ def _calendar_callback(prefix: str, action: str, year: int, month: int, day: int
     return f"cal:{prefix}:{action}:{year}:{month}:{day}"
 
 
-def calendar_kb(prefix: str, year: int, month: int, marked_days: set[int] | None = None) -> InlineKeyboardMarkup:
+def calendar_kb(
+    prefix: str,
+    year: int,
+    month: int,
+    marked_days: set[int] | dict[int, str] | None = None,
+) -> InlineKeyboardMarkup:
     marked_days = marked_days or set()
+    day_marks = marked_days if isinstance(marked_days, dict) else {day: "•" for day in marked_days}
     previous_year, previous_month = (year - 1, 12) if month == 1 else (year, month - 1)
     next_year, next_month = (year + 1, 1) if month == 12 else (year, month + 1)
 
@@ -77,7 +83,7 @@ def calendar_kb(prefix: str, year: int, month: int, marked_days: set[int] | None
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=(f"• {day}" if day in marked_days else str(day)) if day else " ",
+                    text=(f"{day_marks[day]} {day}" if day in day_marks else str(day)) if day else " ",
                     callback_data=_calendar_callback(
                         prefix,
                         "select" if day else "noop",

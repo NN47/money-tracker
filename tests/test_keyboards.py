@@ -33,6 +33,14 @@ class CalendarKeyboardTest(unittest.TestCase):
         self.assertIn("• 12", button_texts)
         self.assertNotIn("12", button_texts)
 
+    def test_calendar_inline_keyboard_marks_income_and_expense_days(self):
+        keyboard = calendar_kb("events", 2026, 6, marked_days={10: "+", 12: "-", 15: "±"})
+        button_texts = [button.text for row in keyboard.inline_keyboard for button in row]
+
+        self.assertIn("+ 10", button_texts)
+        self.assertIn("- 12", button_texts)
+        self.assertIn("± 15", button_texts)
+
 
 class RecurringPaymentsKeyboardTest(unittest.TestCase):
     def test_recurring_payments_actions_contains_only_edit_buttons(self):
