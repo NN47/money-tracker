@@ -54,11 +54,17 @@ async def cancel_any(message: Message, state: FSMContext):
     await _back_to_home(message, state)
 
 
-@router.message(F.text == BACK_TEXT)
+@router.message(
+    StateFilter(
+        TransactionStates.waiting_amount,
+        TransactionStates.waiting_category,
+        TransactionStates.waiting_date_choice,
+        TransactionStates.waiting_manual_date,
+        TransactionStates.waiting_comment,
+    ),
+    F.text == BACK_TEXT,
+)
 async def back_any(message: Message, state: FSMContext):
-    current_state = await state.get_state()
-    if current_state is None:
-        return
     await _back_to_home(message, state)
 
 
