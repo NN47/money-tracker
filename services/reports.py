@@ -119,17 +119,24 @@ def _format_transaction_date(operation_date: date, period_start: date, period_en
     return operation_date.strftime("%d.%m.%Y")
 
 
-def fetch_recent_transactions(limit: int = 10):
+def fetch_recent_transactions(limit: int = 10, tx_type: str | None = None):
     with get_connection() as conn:
         cur = dict_cursor(conn)
+        params: list = []
+        type_filter = ""
+        if tx_type:
+            type_filter = "WHERE type = %s"
+            params.append(tx_type)
+        params.append(limit)
         cur.execute(
-            """
+            f"""
             SELECT id, type, amount, category, comment, operation_date
             FROM transactions
+            {type_filter}
             ORDER BY operation_date DESC, id DESC
             LIMIT %s
             """,
-            (limit,),
+            params,
         )
         tx = cur.fetchall()
         cur.close()
@@ -144,42 +151,50 @@ def _format_transaction_line(row, start: date, end: date) -> str:
     return f"{tx_date} <b>{sign}{money(float(row['amount']))} ₽</b> — {category}{comment}"
 
 
-def build_summary_report(transactions=None) -> str:
+def build_summary_report(transactions=None, tx_type: str | None = None) -> str:
     today, income, expense, payments, recurring, _ = _fetch_main_data()
     balance = income - expense
-    tx = fetch_recent_transactions() if transactions is None else transactions
+    tx = fetch_recent_transactions(tx_type=tx_type) if transactions is None else transactions
     start, nxt = month_bounds(today)
-    lines = [
-        "📊 <b>Отчёт</b>",
-        "",
-        f"<b>Период:</b> {today.strftime('%m.%Y')}",
-        f"<b>Доходы:</b> {money(income)} ₽",
-        f"<b>Расходы:</b> {money(expense)} ₽",
-        f"<b>Баланс:</b> {money(balance)} ₽",
-        "",
-        "<b>Последние 10 операций:</b>",
-    ]
+    if tx_type == "income":
+        title = "📊 <b>Отчёт по доходам</b>"
+        total_lines = [f"<b>Доходы:</b> {money(income)} ₽"]
+        recent_title = "<b>Последние 10 доходов:</b>"
+    elif tx_type == "expense":
+        title = "📊 <b>Отчёт по расходам</b>"
+        total_lines = [f"<b>Расходы:</b> {money(expense)} ₽"]
+        recent_title = "<b>Последние 10 расходов:</b>"
+    else:
+        title = "📊 <b>Отчёт</b>"
+        total_lines = [
+            f"<b>Доходы:</b> {money(income)} ₽",
+            f"<b>Расходы:</b> {money(expense)} ₽",
+            f"<b>Баланс:</b> {money(balance)} ₽",
+        ]
+        recent_title = "<b>Последние 10 операций:</b>"
+    lines = [title, "", f"<b>Период:</b> {today.strftime('%m.%Y')}", *total_lines, "", recent_title]
     if tx:
         for row in tx:
             lines.append(_format_transaction_line(row, start, nxt))
     else:
         lines.append("Операций пока нет")
-    lines.append("")
-    lines.append(f"<b>Ближайшие платежи на {UPCOMING_PAYMENTS_DAYS} дней:</b>")
-    upcoming_payments = sorted([*payments, *recurring], key=lambda row: (row["payment_date"], row["id"]))[:10]
-    if upcoming_payments:
-        for r in upcoming_payments:
-            recurring_mark = " 🔁" if "day_of_month" in r else ""
-            lines.append(f"{r['payment_date'].strftime('%d.%m')} — {html.escape(r['title'])} — <b>{money(float(r['amount']))} ₽</b>{recurring_mark}")
-    else:
-        lines.append("Нет неоплаченных платежей")
+    if tx_type != "income":
+        lines.append("")
+        lines.append(f"<b>Ближайшие платежи на {UPCOMING_PAYMENTS_DAYS} дней:</b>")
+        upcoming_payments = sorted([*payments, *recurring], key=lambda row: (row["payment_date"], row["id"]))[:10]
+        if upcoming_payments:
+            for r in upcoming_payments:
+                recurring_mark = " 🔁" if "day_of_month" in r else ""
+                lines.append(f"{r['payment_date'].strftime('%d.%m')} — {html.escape(r['title'])} — <b>{money(float(r['amount']))} ₽</b>{recurring_mark}")
+        else:
+            lines.append("Нет неоплаченных платежей")
     return "\n".join(lines)
 
 
-def build_transactions_report(limit: int = 50, transactions=None) -> str:
+def build_transactions_report(limit: int = 50, transactions=None, tx_type: str | None = None) -> str:
     today = date.today()
     start, nxt = month_bounds(today)
-    tx = fetch_recent_transactions(limit=limit) if transactions is None else transactions
+    tx = fetch_recent_transactions(limit=limit, tx_type=tx_type) if transactions is None else transactions
     lines = ["📋 <b>Все операции</b>", ""]
     if not tx:
         lines.append("Операций пока нет")

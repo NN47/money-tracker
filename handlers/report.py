@@ -8,6 +8,7 @@ from aiogram.types import CallbackQuery, Message
 from database import dict_cursor, get_connection
 from keyboards.main import (
     BACK_TEXT,
+    dashboard_actions_kb,
     main_menu_kb,
     report_delete_confirm_kb,
     report_edit_fields_kb,
@@ -72,11 +73,11 @@ def _parse_money(raw: str) -> float:
     return round(amount, 2)
 
 
-async def _send_report(message: Message) -> None:
-    transactions = fetch_recent_transactions()
+async def _send_report(message: Message, tx_type: str | None = None) -> None:
+    transactions = fetch_recent_transactions(tx_type=tx_type)
     await message.answer("Меню отчёта:", reply_markup=report_menu_kb())
     await message.answer(
-        build_summary_report(transactions=transactions),
+        build_summary_report(transactions=transactions, tx_type=tx_type),
         reply_markup=report_transactions_kb(transactions),
         parse_mode="HTML",
     )
@@ -86,6 +87,18 @@ async def _send_report(message: Message) -> None:
 async def report(message: Message, state: FSMContext):
     await state.clear()
     await _send_report(message)
+
+
+@router.message(F.text == "📊 Отчёт по доходам")
+async def income_report(message: Message, state: FSMContext):
+    await state.clear()
+    await _send_report(message, tx_type="income")
+
+
+@router.message(F.text == "📊 Отчёт по расходам")
+async def expense_report(message: Message, state: FSMContext):
+    await state.clear()
+    await _send_report(message, tx_type="expense")
 
 
 @router.message(F.text == "📋 Все операции")
@@ -104,7 +117,8 @@ async def report_back(message: Message, state: FSMContext):
     current_state = await state.get_state()
     if current_state is not None:
         return
-    await message.answer(build_dashboard(), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await message.answer(build_dashboard(), reply_markup=dashboard_actions_kb(), parse_mode="HTML")
+    await message.answer("Главное меню:", reply_markup=main_menu_kb())
 
 
 @router.callback_query(F.data.startswith("report_tx:"))

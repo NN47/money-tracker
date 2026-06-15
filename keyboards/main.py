@@ -6,12 +6,20 @@ CANCEL_TEXT = "❌ Отмена"
 BACK_TEXT = "⬅️ Назад"
 MAIN_MENU_TEXTS = {
     "💼 Главный экран",
+    "💰 Доходы",
+    "💸 Расходы",
     "➕ Доход",
     "➖ Расход",
+    "➕ Добавить доход",
+    "➖ Добавить расход",
+    "🔁 Регулярные доходы",
     "🔁 Регулярные платежи",
+    "➕ Добавить регулярный доход",
     "➕ Добавить платеж",
     "📅 Календарь",
     "📊 Отчёт",
+    "📊 Отчёт по доходам",
+    "📊 Отчёт по расходам",
 }
 
 
@@ -101,13 +109,42 @@ def main_menu_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="💼 Главный экран")],
-            [KeyboardButton(text="➕ Доход"), KeyboardButton(text="➖ Расход")],
-            [KeyboardButton(text="🔁 Регулярные платежи")],
+            [KeyboardButton(text="💰 Доходы"), KeyboardButton(text="💸 Расходы")],
             [KeyboardButton(text="📅 Календарь")],
             [KeyboardButton(text="📊 Отчёт")],
         ],
         resize_keyboard=True,
     )
+
+
+def dashboard_actions_kb(extra_rows: list[list[InlineKeyboardButton]] | None = None) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(text="+", callback_data="quick_tx:income"),
+            InlineKeyboardButton(text="-", callback_data="quick_tx:expense"),
+        ]
+    ]
+    if extra_rows:
+        rows.extend(extra_rows)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def section_menu_kb(kind: str) -> ReplyKeyboardMarkup:
+    if kind == "income":
+        rows = [
+            [KeyboardButton(text="➕ Добавить доход")],
+            [KeyboardButton(text="📊 Отчёт по доходам")],
+            [KeyboardButton(text="🔁 Регулярные доходы")],
+            [KeyboardButton(text=BACK_TEXT)],
+        ]
+    else:
+        rows = [
+            [KeyboardButton(text="➖ Добавить расход")],
+            [KeyboardButton(text="📊 Отчёт по расходам")],
+            [KeyboardButton(text="🔁 Регулярные платежи")],
+            [KeyboardButton(text=BACK_TEXT)],
+        ]
+    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
 
 def recurring_payments_actions_kb(operations) -> InlineKeyboardMarkup | None:
@@ -177,15 +214,20 @@ def recurring_delete_confirm_kb(operation_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def recurring_payments_menu_kb() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[
+def recurring_payments_menu_kb(kind: str = "payment") -> ReplyKeyboardMarkup:
+    if kind == "income":
+        rows = [
+            [KeyboardButton(text="➕ Добавить регулярный доход")],
+            [KeyboardButton(text=BACK_TEXT)],
+            [KeyboardButton(text="📊 Отчёт по доходам")],
+        ]
+    else:
+        rows = [
             [KeyboardButton(text="➕ Добавить платеж")],
-            [KeyboardButton(text="💼 Главный экран")],
-            [KeyboardButton(text="📊 Отчёт")],
-        ],
-        resize_keyboard=True,
-    )
+            [KeyboardButton(text=BACK_TEXT)],
+            [KeyboardButton(text="📊 Отчёт по расходам")],
+        ]
+    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
 
 def with_cancel_kb(*rows: list[KeyboardButton]) -> ReplyKeyboardMarkup:
