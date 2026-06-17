@@ -1,7 +1,8 @@
 from datetime import date
 import unittest
+from unittest.mock import patch
 
-from services.reports import _next_recurring_date, format_russian_month_year, upcoming_recurring_payments
+from services.reports import _next_recurring_date, build_dashboard, build_summary_report, format_russian_month_year, upcoming_recurring_payments
 
 
 class RussianMonthFormattingTest(unittest.TestCase):
@@ -31,6 +32,47 @@ class UpcomingRecurringPaymentsTest(unittest.TestCase):
         self.assertEqual([row["title"] for row in result], ["today", "soon"])
         self.assertEqual(result[0]["payment_date"], date(2026, 6, 15))
         self.assertEqual(result[1]["payment_date"], date(2026, 6, 16))
+
+
+class OverduePaymentsReportTest(unittest.TestCase):
+    def test_summary_report_shows_overdue_payments(self):
+        main_data = (
+            date(2026, 6, 17),
+            0,
+            0,
+            [{"id": 2, "title": "Разовый", "amount": 500, "payment_date": date(2026, 6, 15)}],
+            [{"id": 1, "title": "Кредит", "amount": 1000, "day_of_month": 16, "payment_date": date(2026, 6, 16)}],
+            [],
+            [],
+            [],
+        )
+
+        with patch("services.reports._fetch_main_data", return_value=main_data):
+            text = build_summary_report(transactions=[])
+
+        self.assertIn("<b>Просроченные платежи:</b>", text)
+        self.assertIn("16.06.2026 — Кредит — <b>1 000 ₽</b> 🔁", text)
+        self.assertIn("15.06.2026 — Разовый — <b>500 ₽</b>", text)
+
+    def test_dashboard_shows_overdue_payments(self):
+        main_data = (
+            date(2026, 6, 17),
+            0,
+            0,
+            [],
+            [{"id": 1, "title": "Кредит", "amount": 1000, "day_of_month": 16, "payment_date": date(2026, 6, 16)}],
+            [],
+            [],
+            [],
+        )
+
+        with patch("services.reports._fetch_main_data", return_value=main_data), patch(
+            "services.reports.fetch_today_recurring_payments", return_value=[]
+        ):
+            text = build_dashboard()
+
+        self.assertIn("⚠️ Просроченные платежи:", text)
+        self.assertIn("16.06.2026 — Кредит — <b>1 000 ₽</b> 🔁", text)
 
 
 if __name__ == "__main__":
