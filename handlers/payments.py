@@ -904,7 +904,7 @@ async def list_payments(message: Message):
         rows = cur.fetchall()
         cur.close()
     if not rows:
-        await message.answer("Нет ближайших неоплаченных платежей.")
+        await message.answer("Нет платежей.")
         return
     for row in rows:
         txt = f"{row['payment_date'].strftime('%d.%m')} — {row['title']} — {money(float(row['amount']))} ₽"
