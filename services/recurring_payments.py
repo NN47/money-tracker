@@ -177,7 +177,8 @@ def fetch_unpaid_due_recurring_payments(payment_date: date | None = None):
 
 
 def mark_recurring_payment_paid(recurring_operation_id: int, payment_date: date | None = None) -> dict:
-    today = payment_date or moscow_today()
+    today = moscow_today()
+    requested_payment_date = payment_date
     with get_connection() as conn:
         cur = dict_cursor(conn)
         cur.execute(
@@ -195,6 +196,36 @@ def mark_recurring_payment_paid(recurring_operation_id: int, payment_date: date 
         if not operation:
             cur.close()
             return {"status": "not_found"}
+
+        if requested_payment_date is None:
+            cur.execute(
+                """
+                SELECT due.payment_date
+                FROM (
+                    SELECT generated_day::date AS payment_date
+                    FROM generate_series(
+                        (SELECT created_at::date FROM recurring_operations WHERE id = %s),
+                        %s::date,
+                        interval '1 day'
+                    ) AS generated_day
+                    WHERE EXTRACT(DAY FROM generated_day)::int = (
+                        SELECT day_of_month FROM recurring_operations WHERE id = %s
+                    )
+                ) due
+                LEFT JOIN recurring_payments_log l
+                    ON l.recurring_operation_id = %s
+                   AND l.payment_date = due.payment_date
+                WHERE l.id IS NULL
+                ORDER BY due.payment_date
+                LIMIT 1
+                """,
+                (recurring_operation_id, today, recurring_operation_id, recurring_operation_id),
+            )
+            due_row = cur.fetchone()
+            if due_row:
+                today = due_row["payment_date"]
+        else:
+            today = requested_payment_date
 
         cur.execute(
             """
