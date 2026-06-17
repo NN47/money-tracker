@@ -72,6 +72,8 @@ class OverduePaymentsReportTest(unittest.TestCase):
             text = build_dashboard()
 
         self.assertIn("⚠️ Просроченные платежи:", text)
+        self.assertIn("Платежи в ближайшие 10 дней.", text)
+        self.assertNotIn("📅 Ближайшие платежи:", text)
         self.assertIn("16.06.2026 — Кредит — <b>1 000 ₽</b> 🔁", text)
 
 
