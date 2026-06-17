@@ -12,13 +12,13 @@ from keyboards.main import (
     CANCEL_TEXT,
     MAIN_MENU_TEXTS,
     calendar_back_kb,
+    back_kb,
     calendar_kb,
-    cancel_kb,
-    category_choice_kb,
-    date_choice_kb,
+    category_choice_back_kb,
+    date_choice_back_kb,
     main_menu_kb,
     section_menu_kb,
-    skip_comment_kb,
+    skip_comment_back_kb,
 )
 from services.dates import parse_transaction_date
 from handlers.home import send_main_screen
@@ -66,6 +66,37 @@ async def cancel_any(message: Message, state: FSMContext):
     F.text == BACK_TEXT,
 )
 async def back_any(message: Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state == TransactionStates.waiting_amount.state:
+        data = await state.get_data()
+        if data.get("type") == "expense":
+            await expense_section(message, state)
+        elif data.get("type") == "income":
+            await income_section(message, state)
+        else:
+            await _back_to_home(message, state)
+        return
+
+    if current_state == TransactionStates.waiting_category.state:
+        await state.set_state(TransactionStates.waiting_amount)
+        await message.answer("Введите сумму операции:", reply_markup=back_kb())
+        return
+
+    if current_state == TransactionStates.waiting_date_choice.state:
+        await state.set_state(TransactionStates.waiting_category)
+        await _ask_category(message, state)
+        return
+
+    if current_state == TransactionStates.waiting_manual_date.state:
+        await state.set_state(TransactionStates.waiting_date_choice)
+        await message.answer("Дата операции:", reply_markup=date_choice_back_kb())
+        return
+
+    if current_state == TransactionStates.waiting_comment.state:
+        await state.set_state(TransactionStates.waiting_date_choice)
+        await message.answer("Дата операции:", reply_markup=date_choice_back_kb())
+        return
+
     await _back_to_home(message, state)
 
 
@@ -87,7 +118,7 @@ async def _start_transaction(message: Message, state: FSMContext, tx_type: str):
     await state.clear()
     await state.update_data(type=tx_type)
     await state.set_state(TransactionStates.waiting_amount)
-    await message.answer("Введите сумму операции:", reply_markup=cancel_kb())
+    await message.answer("Введите сумму операции:", reply_markup=back_kb())
 
 
 @router.message(F.text == "💰 Доходы")
@@ -130,7 +161,7 @@ async def quick_transaction(callback: CallbackQuery, state: FSMContext):
 async def _ask_category(message: Message, state: FSMContext, prompt: str = "Выберите категорию кнопкой или введите новую текстом:"):
     data = await state.get_data()
     categories = [row["category"] for row in fetch_categories(tx_type=data.get("type"))]
-    await message.answer(prompt, reply_markup=category_choice_kb(categories))
+    await message.answer(prompt, reply_markup=category_choice_back_kb(categories))
 
 
 @router.message(TransactionStates.waiting_amount)
@@ -149,14 +180,14 @@ async def transaction_amount(message: Message, state: FSMContext):
 async def transaction_category(message: Message, state: FSMContext):
     category = message.text.strip()
     if category == "✏️ Новая категория":
-        await message.answer("Введите новую категорию:", reply_markup=cancel_kb())
+        await message.answer("Введите новую категорию:", reply_markup=back_kb())
         return
     if not category:
         await message.answer("Категория не может быть пустой.")
         return
     await state.update_data(category=category)
     await state.set_state(TransactionStates.waiting_date_choice)
-    await message.answer("Дата операции:", reply_markup=date_choice_kb())
+    await message.answer("Дата операции:", reply_markup=date_choice_back_kb())
 
 
 @router.message(TransactionStates.waiting_date_choice)
@@ -164,7 +195,7 @@ async def transaction_date_choice(message: Message, state: FSMContext):
     if message.text == "Сегодня":
         await state.update_data(operation_date=date.today().isoformat())
         await state.set_state(TransactionStates.waiting_comment)
-        await message.answer("Введите комментарий или нажмите «Пропустить».", reply_markup=skip_comment_kb())
+        await message.answer("Введите комментарий или нажмите «Пропустить».", reply_markup=skip_comment_back_kb())
         return
     if message.text == "Ввести дату":
         today = date.today()
@@ -216,7 +247,7 @@ async def transaction_calendar(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer(
             f"Дата операции: {op_date.strftime('%d.%m.%Y')}\nВведите комментарий или нажмите «Пропустить».",
-            reply_markup=skip_comment_kb(),
+            reply_markup=skip_comment_back_kb(),
         )
     await callback.answer("Дата выбрана")
 
@@ -230,7 +261,7 @@ async def transaction_manual_date(message: Message, state: FSMContext):
         return
     await state.update_data(operation_date=op_date.isoformat())
     await state.set_state(TransactionStates.waiting_comment)
-    await message.answer("Введите комментарий или нажмите «Пропустить».", reply_markup=skip_comment_kb())
+    await message.answer("Введите комментарий или нажмите «Пропустить».", reply_markup=skip_comment_back_kb())
 
 
 @router.message(TransactionStates.waiting_comment)

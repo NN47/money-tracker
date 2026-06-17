@@ -245,12 +245,26 @@ def with_cancel_kb(*rows: list[KeyboardButton]) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=keyboard_rows, resize_keyboard=True, one_time_keyboard=True)
 
 
+def with_back_kb(*rows: list[KeyboardButton]) -> ReplyKeyboardMarkup:
+    keyboard_rows = [list(row) for row in rows]
+    keyboard_rows.append([KeyboardButton(text=BACK_TEXT)])
+    return ReplyKeyboardMarkup(keyboard=keyboard_rows, resize_keyboard=True, one_time_keyboard=True)
+
+
 def skip_comment_kb() -> ReplyKeyboardMarkup:
     return with_cancel_kb([KeyboardButton(text="Пропустить")])
 
 
+def skip_comment_back_kb() -> ReplyKeyboardMarkup:
+    return with_back_kb([KeyboardButton(text="Пропустить")])
+
+
 def date_choice_kb() -> ReplyKeyboardMarkup:
     return with_cancel_kb([KeyboardButton(text="Сегодня")], [KeyboardButton(text="Ввести дату")])
+
+
+def date_choice_back_kb() -> ReplyKeyboardMarkup:
+    return with_back_kb([KeyboardButton(text="Сегодня")], [KeyboardButton(text="Ввести дату")])
 
 
 def recurring_type_kb() -> ReplyKeyboardMarkup:
@@ -265,6 +279,14 @@ def category_choice_kb(categories) -> ReplyKeyboardMarkup:
         rows.append([KeyboardButton(text=category) for category in categories[index : index + 2]])
     rows.append([KeyboardButton(text="✏️ Новая категория")])
     return with_cancel_kb(*rows)
+
+
+def category_choice_back_kb(categories) -> ReplyKeyboardMarkup:
+    rows = []
+    for index in range(0, len(categories), 2):
+        rows.append([KeyboardButton(text=category) for category in categories[index : index + 2]])
+    rows.append([KeyboardButton(text="✏️ Новая категория")])
+    return with_back_kb(*rows)
 
 
 def payment_done_kb(payment_id: int) -> InlineKeyboardMarkup:
@@ -295,6 +317,10 @@ def recurring_due_kb(operations) -> InlineKeyboardMarkup | None:
 
 def cancel_kb() -> ReplyKeyboardMarkup:
     return with_cancel_kb()
+
+
+def back_kb() -> ReplyKeyboardMarkup:
+    return with_back_kb()
 
 
 def report_menu_kb() -> ReplyKeyboardMarkup:
