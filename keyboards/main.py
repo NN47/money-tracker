@@ -333,8 +333,10 @@ def report_menu_kb() -> ReplyKeyboardMarkup:
     )
 
 
-def report_transactions_kb(transactions) -> InlineKeyboardMarkup | None:
+def report_transactions_kb(transactions, scope: str = "all", include_edit_button: bool = True) -> InlineKeyboardMarkup | None:
     rows = []
+    if include_edit_button:
+        rows.append([InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"report_edit_recent:{scope}")])
     for row in transactions:
         sign = "+" if row["type"] == "income" else "-"
         amount = f"{float(row['amount']):,.2f}".replace(",", " ")
@@ -350,7 +352,7 @@ def report_transactions_kb(transactions) -> InlineKeyboardMarkup | None:
                 )
             ]
         )
-    if not rows:
+    if not rows or (include_edit_button and len(rows) == 1):
         return None
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

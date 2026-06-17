@@ -10,6 +10,7 @@ from keyboards.main import (
     recurring_due_kb,
     recurring_edit_fields_kb,
     recurring_payments_actions_kb,
+    report_transactions_kb,
     skip_comment_back_kb,
 )
 
@@ -61,6 +62,46 @@ class BackKeyboardTest(unittest.TestCase):
         self.assertIn("Пропустить", button_texts)
         self.assertIn(BACK_TEXT, button_texts)
         self.assertNotIn(CANCEL_TEXT, button_texts)
+
+
+class ReportKeyboardTest(unittest.TestCase):
+    def test_report_transactions_keyboard_starts_with_edit_button_for_scope(self):
+        keyboard = report_transactions_kb(
+            [
+                {
+                    "id": 7,
+                    "type": "expense",
+                    "amount": 10000,
+                    "category": "Кредит",
+                    "operation_date": date(2026, 6, 17),
+                }
+            ],
+            scope="expense",
+        )
+
+        self.assertEqual(keyboard.inline_keyboard[0][0].text, "✏️ Редактировать")
+        self.assertEqual(keyboard.inline_keyboard[0][0].callback_data, "report_edit_recent:expense")
+        self.assertEqual(keyboard.inline_keyboard[1][0].callback_data, "report_tx:7")
+
+    def test_report_transactions_keyboard_can_hide_edit_button(self):
+        keyboard = report_transactions_kb(
+            [
+                {
+                    "id": 7,
+                    "type": "expense",
+                    "amount": 10000,
+                    "category": "Кредит",
+                    "operation_date": date(2026, 6, 17),
+                }
+            ],
+            include_edit_button=False,
+        )
+
+        self.assertEqual(len(keyboard.inline_keyboard), 1)
+        self.assertEqual(keyboard.inline_keyboard[0][0].callback_data, "report_tx:7")
+
+    def test_report_transactions_keyboard_is_empty_without_transactions(self):
+        self.assertIsNone(report_transactions_kb([]))
 
 
 class RecurringPaymentsKeyboardTest(unittest.TestCase):
