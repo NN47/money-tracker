@@ -3,11 +3,14 @@ import unittest
 
 from keyboards.main import (
     BACK_TEXT,
+    CANCEL_TEXT,
+    back_kb,
     calendar_back_kb,
     calendar_kb,
     recurring_due_kb,
     recurring_edit_fields_kb,
     recurring_payments_actions_kb,
+    skip_comment_back_kb,
 )
 
 
@@ -41,6 +44,23 @@ class CalendarKeyboardTest(unittest.TestCase):
         self.assertIn("+ 10", button_texts)
         self.assertIn("- 12", button_texts)
         self.assertIn("± 15", button_texts)
+
+
+class BackKeyboardTest(unittest.TestCase):
+    def test_back_keyboard_contains_back_instead_of_cancel(self):
+        keyboard = back_kb()
+        button_texts = [button.text for row in keyboard.keyboard for button in row]
+
+        self.assertEqual(button_texts, [BACK_TEXT])
+        self.assertNotIn(CANCEL_TEXT, button_texts)
+
+    def test_transaction_comment_keyboard_uses_back_button(self):
+        keyboard = skip_comment_back_kb()
+        button_texts = [button.text for row in keyboard.keyboard for button in row]
+
+        self.assertIn("Пропустить", button_texts)
+        self.assertIn(BACK_TEXT, button_texts)
+        self.assertNotIn(CANCEL_TEXT, button_texts)
 
 
 class RecurringPaymentsKeyboardTest(unittest.TestCase):
