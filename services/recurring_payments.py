@@ -136,6 +136,46 @@ def fetch_unpaid_today_recurring_payments(payment_date: date | None = None):
     return unpaid
 
 
+def fetch_unpaid_due_recurring_payments(payment_date: date | None = None):
+    """Return active recurring payments due on or before the selected date and not yet paid.
+
+    Each returned row contains ``payment_date`` so overdue callback buttons can mark the
+    exact missed payment date as paid instead of creating a log for today.
+    """
+    today = payment_date or moscow_today()
+    with get_connection() as conn:
+        cur = dict_cursor(conn)
+        cur.execute(
+            """
+            SELECT
+                ro.id,
+                ro.title,
+                ro.type,
+                ro.amount,
+                ro.category,
+                ro.day_of_month,
+                due.payment_date
+            FROM recurring_operations ro
+            JOIN LATERAL (
+                SELECT generated_day::date AS payment_date
+                FROM generate_series(ro.created_at::date, %s::date, interval '1 day') AS generated_day
+                WHERE EXTRACT(DAY FROM generated_day)::int = ro.day_of_month
+            ) due ON TRUE
+            LEFT JOIN recurring_payments_log l
+                ON l.recurring_operation_id = ro.id
+               AND l.payment_date = due.payment_date
+            WHERE ro.is_active = TRUE
+              AND ro.type IN ('payment', 'expense')
+              AND l.id IS NULL
+            ORDER BY due.payment_date, ro.id
+            """,
+            (today,),
+        )
+        rows = cur.fetchall()
+        cur.close()
+    return rows
+
+
 def mark_recurring_payment_paid(recurring_operation_id: int, payment_date: date | None = None) -> dict:
     today = payment_date or moscow_today()
     with get_connection() as conn:

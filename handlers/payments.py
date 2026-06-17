@@ -38,8 +38,9 @@ from services.recurring_payments import (
     deactivate_recurring_operation,
     fetch_active_recurring_operation,
     fetch_all_active_recurring_operations,
-    fetch_unpaid_today_recurring_payments,
+    fetch_unpaid_due_recurring_payments,
     mark_recurring_payment_paid,
+    moscow_today,
     update_recurring_operation,
 )
 from services.reports import build_dashboard, money
@@ -112,7 +113,7 @@ def parse_flexible_date(raw: str) -> date:
 
 async def _back_to_home(message: Message, state: FSMContext):
     await state.clear()
-    unpaid_operations = fetch_unpaid_today_recurring_payments()
+    unpaid_operations = fetch_unpaid_due_recurring_payments()
     due_kb = recurring_due_kb(unpaid_operations)
     extra_rows = due_kb.inline_keyboard if due_kb else None
     await message.answer(build_dashboard(), reply_markup=dashboard_actions_kb(extra_rows))
@@ -167,13 +168,18 @@ async def send_recurring_operations_section(message: Message, kind: str = "payme
 
 
 def build_recurring_payment_notification(operations) -> str:
-    lines = ["🔥 Сегодня к оплате:"]
-    lines.extend([f"• {row['title']} — {money(float(row['amount']))} ₽" for row in operations])
+    today = moscow_today()
+    has_overdue = any(row.get("payment_date") and row["payment_date"] < today for row in operations)
+    lines = ["🔥 Вы не оплатили:" if has_overdue else "🔥 Сегодня к оплате:"]
+    for row in operations:
+        payment_date = row.get("payment_date")
+        date_label = f" за {payment_date.strftime('%d.%m.%Y')}" if payment_date and payment_date < today else ""
+        lines.append(f"• {row['title']}{date_label} — {money(float(row['amount']))} ₽")
     return "\n".join(lines)
 
 
 async def send_recurring_payment_notification(bot: Bot, chat_id: int, operation_ids: list[int] | None = None) -> None:
-    operations = fetch_unpaid_today_recurring_payments()
+    operations = fetch_unpaid_due_recurring_payments()
     if operation_ids is not None:
         allowed_ids = set(operation_ids)
         operations = [row for row in operations if row["id"] in allowed_ids]
@@ -432,7 +438,9 @@ async def payment_mark_done(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("pay_recurring:"))
 async def recurring_payment_mark_paid(callback: CallbackQuery):
     try:
-        operation_id = int(callback.data.split(":", maxsplit=1)[1])
+        parts = callback.data.split(":")
+        operation_id = int(parts[1])
+        payment_date = date.fromisoformat(parts[2]) if len(parts) > 2 else None
     except (IndexError, ValueError):
         await callback.answer("Не понял, какой платёж отметить", show_alert=True)
         return
@@ -440,7 +448,7 @@ async def recurring_payment_mark_paid(callback: CallbackQuery):
     await callback.answer("Записываю платёж…")
 
     try:
-        result = mark_recurring_payment_paid(operation_id)
+        result = mark_recurring_payment_paid(operation_id, payment_date)
     except Exception:
         logger.exception("Failed to mark recurring operation %s as paid", operation_id)
         await send_callback_message(callback, "Не получилось записать платёж в расходы. Попробуйте ещё раз.")
@@ -451,7 +459,7 @@ async def recurring_payment_mark_paid(callback: CallbackQuery):
     if status == "paid":
         title = result["title"]
         await remove_inline_keyboard(callback)
-        unpaid_operations = fetch_unpaid_today_recurring_payments()
+        unpaid_operations = fetch_unpaid_due_recurring_payments()
         await send_callback_message(
             callback,
             f"Платёж «{title}» записан в расходы ✅",
@@ -462,8 +470,8 @@ async def recurring_payment_mark_paid(callback: CallbackQuery):
 
     if status == "already_paid":
         await remove_inline_keyboard(callback)
-        unpaid_operations = fetch_unpaid_today_recurring_payments()
-        await send_callback_message(callback, "Этот платёж уже учтён сегодня ✅", reply_markup=main_menu_kb())
+        unpaid_operations = fetch_unpaid_due_recurring_payments()
+        await send_callback_message(callback, "Этот платёж уже учтён ✅", reply_markup=main_menu_kb())
         await send_callback_message(callback, build_dashboard(), reply_markup=recurring_due_kb(unpaid_operations))
         return
 
