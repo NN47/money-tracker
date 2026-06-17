@@ -16,6 +16,7 @@ from keyboards.main import (
     calendar_back_kb,
     calendar_kb,
     cancel_kb,
+    category_choice_kb,
     dashboard_actions_kb,
     main_menu_kb,
     payment_done_kb,
@@ -43,7 +44,7 @@ from services.recurring_payments import (
     moscow_today,
     update_recurring_operation,
 )
-from services.reports import build_dashboard, money
+from services.reports import build_dashboard, fetch_categories, money
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -662,6 +663,9 @@ async def recurring_edit_day(message: Message, state: FSMContext):
 @router.message(RecurringEditStates.waiting_category)
 async def recurring_edit_category(message: Message, state: FSMContext):
     category = message.text.strip()
+    if category == "✏️ Новая категория":
+        await message.answer("Введите новую категорию:", reply_markup=cancel_kb())
+        return
     if not category:
         await message.answer("Категория не может быть пустой.")
         return
@@ -756,8 +760,9 @@ async def recurring_income_start(message: Message, state: FSMContext):
 @router.message(F.text == "➕ Добавить платеж")
 async def recurring_start(message: Message, state: FSMContext):
     await state.clear()
-    await state.set_state(RecurringStates.waiting_type)
-    await message.answer("Выберите тип операции:", reply_markup=recurring_type_kb())
+    await state.update_data(type="payment")
+    await state.set_state(RecurringStates.waiting_title)
+    await message.answer("Введите название:", reply_markup=cancel_kb())
 
 
 @router.message(RecurringStates.waiting_type)
@@ -830,7 +835,7 @@ async def recurring_calendar(callback: CallbackQuery, state: FSMContext):
     await state.set_state(RecurringStates.waiting_category)
     if callback.message:
         await callback.message.edit_reply_markup(reply_markup=None)
-        await callback.message.answer(f"День платежа: {day}. Введите категорию:", reply_markup=cancel_kb())
+        await _ask_recurring_category(callback.message, state, f"День платежа: {day}. Выберите категорию кнопкой или введите новую текстом:")
     await callback.answer("День выбран")
 
 
@@ -845,12 +850,22 @@ async def recurring_day(message: Message, state: FSMContext):
         return
     await state.update_data(day_of_month=day)
     await state.set_state(RecurringStates.waiting_category)
-    await message.answer("Введите категорию:", reply_markup=cancel_kb())
+    await _ask_recurring_category(message, state)
+
+
+async def _ask_recurring_category(message: Message, state: FSMContext, prompt: str = "Выберите категорию кнопкой или введите новую текстом:"):
+    data = await state.get_data()
+    category_type = "income" if data.get("type") == "income" else "expense"
+    categories = [row["category"] for row in fetch_categories(tx_type=category_type)]
+    await message.answer(prompt, reply_markup=category_choice_kb(categories))
 
 
 @router.message(RecurringStates.waiting_category)
 async def recurring_category(message: Message, state: FSMContext):
     category = message.text.strip()
+    if category == "✏️ Новая категория":
+        await message.answer("Введите новую категорию:", reply_markup=cancel_kb())
+        return
     if not category:
         await message.answer("Категория не может быть пустой.")
         return

@@ -239,6 +239,103 @@ def build_summary_report(transactions=None, tx_type: str | None = None) -> str:
     return "\n".join(lines)
 
 
+
+def fetch_categories(tx_type: str | None = None):
+    with get_connection() as conn:
+        cur = dict_cursor(conn)
+        params: list = []
+        type_filter = ""
+        if tx_type:
+            type_filter = "AND type = %s"
+            params.append(tx_type)
+        cur.execute(
+            f"""
+            SELECT category, COUNT(*) operations_count, COALESCE(SUM(amount), 0) total
+            FROM transactions
+            WHERE COALESCE(NULLIF(TRIM(category), ''), '') <> ''
+            {type_filter}
+            GROUP BY category
+            ORDER BY LOWER(category)
+            """,
+            params,
+        )
+        categories = cur.fetchall()
+        cur.close()
+    return categories
+
+
+def fetch_category_transactions(category: str, limit: int = 50, tx_type: str | None = None):
+    with get_connection() as conn:
+        cur = dict_cursor(conn)
+        params: list = [category]
+        type_filter = ""
+        if tx_type:
+            type_filter = "AND type = %s"
+            params.append(tx_type)
+        params.append(limit)
+        cur.execute(
+            f"""
+            SELECT id, type, amount, category, comment, operation_date
+            FROM transactions
+            WHERE category = %s
+            {type_filter}
+            ORDER BY operation_date DESC, id DESC
+            LIMIT %s
+            """,
+            params,
+        )
+        tx = cur.fetchall()
+        cur.close()
+    return tx
+
+
+def build_categories_report(categories, tx_type: str | None = None) -> str:
+    if tx_type == "income":
+        title = "📂 <b>Категории доходов</b>"
+    elif tx_type == "expense":
+        title = "📂 <b>Категории расходов</b>"
+    else:
+        title = "📂 <b>Категории</b>"
+    lines = [title, ""]
+    if not categories:
+        lines.append("Категорий пока нет")
+        return "\n".join(lines)
+    for row in categories:
+        lines.append(
+            f"• {html.escape(row['category'])} — {int(row['operations_count'])} опер., "
+            f"<b>{money(float(row['total']))} ₽</b>"
+        )
+    lines.append("")
+    lines.append("Откройте категорию кнопкой ниже, чтобы увидеть операции.")
+    return "\n".join(lines)
+
+
+def build_category_report(category: str, transactions, tx_type: str | None = None) -> str:
+    today = date.today()
+    start, nxt = month_bounds(today)
+    if tx_type == "income":
+        title = f"📂 <b>Доходы в категории: {html.escape(category)}</b>"
+    elif tx_type == "expense":
+        title = f"📂 <b>Расходы в категории: {html.escape(category)}</b>"
+    else:
+        title = f"📂 <b>Категория: {html.escape(category)}</b>"
+    income = sum(float(row['amount']) for row in transactions if row['type'] == 'income')
+    expense = sum(float(row['amount']) for row in transactions if row['type'] == 'expense')
+    lines = [title, ""]
+    if tx_type != "expense":
+        lines.append(f"<b>Доходы:</b> {money(income)} ₽")
+    if tx_type != "income":
+        lines.append(f"<b>Расходы:</b> {money(expense)} ₽")
+    if tx_type is None:
+        lines.append(f"<b>Баланс:</b> {money(income - expense)} ₽")
+    lines.extend(["", "<b>Операции:</b>"])
+    if transactions:
+        for row in transactions:
+            lines.append(_format_transaction_line(row, start, nxt))
+    else:
+        lines.append("Операций пока нет")
+    return "\n".join(lines)
+
 def build_transactions_report(limit: int = 50, transactions=None, tx_type: str | None = None) -> str:
     today = date.today()
     start, nxt = month_bounds(today)
