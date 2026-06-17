@@ -1,3 +1,4 @@
+from datetime import date
 import unittest
 
 from keyboards.main import (
@@ -56,6 +57,12 @@ class RecurringPaymentsKeyboardTest(unittest.TestCase):
         self.assertEqual(len(buttons), 1)
         self.assertEqual(buttons[0].text, "✅ Оплатил: Сбер")
         self.assertEqual(buttons[0].callback_data, "pay_recurring:1")
+
+    def test_recurring_due_keyboard_includes_payment_date_when_available(self):
+        keyboard = recurring_due_kb([{"id": 1, "title": "Сбер", "payment_date": date(2026, 6, 16)}])
+        buttons = [button for row in keyboard.inline_keyboard for button in row]
+
+        self.assertEqual(buttons[0].callback_data, "pay_recurring:1:2026-06-16")
 
     def test_recurring_edit_menu_contains_delete_button(self):
         keyboard = recurring_edit_fields_kb(1)

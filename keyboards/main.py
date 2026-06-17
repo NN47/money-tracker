@@ -267,11 +267,13 @@ def recurring_due_kb(operations) -> InlineKeyboardMarkup | None:
     for operation in operations:
         operation_id = operation["id"]
         title = operation["title"]
+        payment_date = operation.get("payment_date")
+        date_suffix = f":{payment_date.isoformat()}" if payment_date else ""
         rows.append(
             [
                 InlineKeyboardButton(
                     text=f"✅ Оплатил: {title}",
-                    callback_data=f"pay_recurring:{operation_id}",
+                    callback_data=f"pay_recurring:{operation_id}{date_suffix}",
                 )
             ]
         )

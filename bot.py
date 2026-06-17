@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 from database import init_db
 from handlers import payments, report, start, transactions
-from services.recurring_payments import MOSCOW_TZ, fetch_unpaid_today_recurring_payments
+from services.recurring_payments import MOSCOW_TZ, fetch_unpaid_due_recurring_payments
 
 
 def seconds_until_next_moscow_notification() -> float:
@@ -26,7 +26,7 @@ async def recurring_payment_notifier(bot: Bot, owner_telegram_id: int) -> None:
     while True:
         await asyncio.sleep(seconds_until_next_moscow_notification())
         try:
-            operations = fetch_unpaid_today_recurring_payments()
+            operations = fetch_unpaid_due_recurring_payments()
             if operations:
                 await payments.send_recurring_payment_notification(bot, owner_telegram_id)
         except Exception:
