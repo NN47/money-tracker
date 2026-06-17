@@ -141,6 +141,7 @@ def build_dashboard() -> str:
         lines.extend(["", "<b>⚠️ Просроченные платежи:</b>"])
         lines.extend([_format_payment_line(r, include_year=True) for r in overdue])
     lines.extend(["", "<b>📅 Платежи в ближайшие 10 дней:</b>"])
+    recurring = [row for row in recurring if row["payment_date"] != today]
     upcoming_payments = sorted([*payments, *recurring], key=lambda row: (row["payment_date"], row["id"]))[:10]
     if upcoming_payments:
         for r in upcoming_payments:
