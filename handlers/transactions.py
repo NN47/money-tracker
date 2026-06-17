@@ -14,6 +14,7 @@ from keyboards.main import (
     calendar_back_kb,
     calendar_kb,
     cancel_kb,
+    category_choice_kb,
     date_choice_kb,
     main_menu_kb,
     section_menu_kb,
@@ -21,7 +22,7 @@ from keyboards.main import (
 )
 from services.dates import parse_transaction_date
 from handlers.home import send_main_screen
-from services.reports import build_summary_report, fetch_recent_transactions
+from services.reports import build_summary_report, fetch_categories, fetch_recent_transactions
 
 router = Router()
 
@@ -92,6 +93,7 @@ async def _start_transaction(message: Message, state: FSMContext, tx_type: str):
 @router.message(F.text == "💰 Доходы")
 async def income_section(message: Message, state: FSMContext):
     await state.clear()
+    await state.update_data(report_scope="income")
     transactions = fetch_recent_transactions(tx_type="income")
     await message.answer(build_summary_report(transactions=transactions, tx_type="income"), reply_markup=section_menu_kb("income"), parse_mode="HTML")
 
@@ -99,6 +101,7 @@ async def income_section(message: Message, state: FSMContext):
 @router.message(F.text == "💸 Расходы")
 async def expense_section(message: Message, state: FSMContext):
     await state.clear()
+    await state.update_data(report_scope="expense")
     transactions = fetch_recent_transactions(tx_type="expense")
     await message.answer(build_summary_report(transactions=transactions, tx_type="expense"), reply_markup=section_menu_kb("expense"), parse_mode="HTML")
 
@@ -124,6 +127,12 @@ async def quick_transaction(callback: CallbackQuery, state: FSMContext):
         await _start_transaction(callback.message, state, tx_type)
 
 
+async def _ask_category(message: Message, state: FSMContext, prompt: str = "Выберите категорию кнопкой или введите новую текстом:"):
+    data = await state.get_data()
+    categories = [row["category"] for row in fetch_categories(tx_type=data.get("type"))]
+    await message.answer(prompt, reply_markup=category_choice_kb(categories))
+
+
 @router.message(TransactionStates.waiting_amount)
 async def transaction_amount(message: Message, state: FSMContext):
     try:
@@ -133,12 +142,15 @@ async def transaction_amount(message: Message, state: FSMContext):
         return
     await state.update_data(amount=amount)
     await state.set_state(TransactionStates.waiting_category)
-    await message.answer("Введите категорию:", reply_markup=cancel_kb())
+    await _ask_category(message, state)
 
 
 @router.message(TransactionStates.waiting_category)
 async def transaction_category(message: Message, state: FSMContext):
     category = message.text.strip()
+    if category == "✏️ Новая категория":
+        await message.answer("Введите новую категорию:", reply_markup=cancel_kb())
+        return
     if not category:
         await message.answer("Категория не может быть пустой.")
         return

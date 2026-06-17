@@ -1,4 +1,5 @@
 import html
+from urllib.parse import unquote
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -11,6 +12,7 @@ from keyboards.main import (
     main_menu_kb,
     report_delete_confirm_kb,
     report_edit_fields_kb,
+    report_categories_kb,
     report_menu_kb,
     report_transactions_kb,
     transaction_type_edit_kb,
@@ -18,8 +20,12 @@ from keyboards.main import (
 from services.dates import parse_transaction_date
 from handlers.home import send_main_screen
 from services.reports import (
+    build_categories_report,
+    build_category_report,
     build_summary_report,
     build_transactions_report,
+    fetch_categories,
+    fetch_category_transactions,
     fetch_recent_transactions,
     money,
 )
@@ -72,7 +78,9 @@ def _parse_money(raw: str) -> float:
     return round(amount, 2)
 
 
-async def _send_report(message: Message, tx_type: str | None = None) -> None:
+async def _send_report(message: Message, tx_type: str | None = None, state: FSMContext | None = None) -> None:
+    if state is not None:
+        await state.update_data(report_scope=tx_type or "all")
     transactions = fetch_recent_transactions(tx_type=tx_type)
     await message.answer("Меню отчёта:", reply_markup=report_menu_kb())
     await message.answer(
@@ -85,19 +93,51 @@ async def _send_report(message: Message, tx_type: str | None = None) -> None:
 @router.message(F.text == "📊 Отчёт")
 async def report(message: Message, state: FSMContext):
     await state.clear()
-    await _send_report(message)
+    await _send_report(message, state=state)
 
 
 @router.message(F.text == "📊 Отчёт по доходам")
 async def income_report(message: Message, state: FSMContext):
     await state.clear()
-    await _send_report(message, tx_type="income")
+    await _send_report(message, tx_type="income", state=state)
 
 
 @router.message(F.text == "📊 Отчёт по расходам")
 async def expense_report(message: Message, state: FSMContext):
     await state.clear()
-    await _send_report(message, tx_type="expense")
+    await _send_report(message, tx_type="expense", state=state)
+
+
+@router.message(F.text == "📂 Категории")
+async def categories_report(message: Message, state: FSMContext):
+    data = await state.get_data()
+    scope = data.get("report_scope", "all")
+    tx_type = scope if scope in {"income", "expense"} else None
+    categories = fetch_categories(tx_type=tx_type)
+    await message.answer(
+        build_categories_report(categories, tx_type=tx_type),
+        reply_markup=report_categories_kb([row["category"] for row in categories], scope=scope),
+        parse_mode="HTML",
+    )
+
+
+@router.callback_query(F.data.startswith("report_cat:"))
+async def category_report_callback(callback: CallbackQuery):
+    try:
+        _, scope, encoded_category = callback.data.split(":", maxsplit=2)
+    except (AttributeError, ValueError):
+        await callback.answer("Не понял категорию", show_alert=True)
+        return
+    tx_type = scope if scope in {"income", "expense"} else None
+    category = unquote(encoded_category)
+    transactions = fetch_category_transactions(category, tx_type=tx_type)
+    await callback.answer("Категория выбрана")
+    if callback.message:
+        await callback.message.answer(
+            build_category_report(category, transactions, tx_type=tx_type),
+            reply_markup=report_transactions_kb(transactions),
+            parse_mode="HTML",
+        )
 
 
 @router.message(F.text == "📋 Все операции")

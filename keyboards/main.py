@@ -20,6 +20,7 @@ MAIN_MENU_TEXTS = {
     "📊 Отчёт",
     "📊 Отчёт по доходам",
     "📊 Отчёт по расходам",
+    "📂 Категории",
 }
 
 
@@ -140,6 +141,7 @@ def section_menu_kb(kind: str) -> ReplyKeyboardMarkup:
         rows = [
             [KeyboardButton(text="➕ Добавить доход")],
             [KeyboardButton(text="📊 Отчёт по доходам")],
+            [KeyboardButton(text="📂 Категории")],
             [KeyboardButton(text="🔁 Регулярные доходы")],
             [KeyboardButton(text=BACK_TEXT)],
         ]
@@ -147,6 +149,7 @@ def section_menu_kb(kind: str) -> ReplyKeyboardMarkup:
         rows = [
             [KeyboardButton(text="➖ Добавить расход")],
             [KeyboardButton(text="📊 Отчёт по расходам")],
+            [KeyboardButton(text="📂 Категории")],
             [KeyboardButton(text="🔁 Регулярные платежи")],
             [KeyboardButton(text=BACK_TEXT)],
         ]
@@ -256,6 +259,14 @@ def recurring_type_kb() -> ReplyKeyboardMarkup:
     )
 
 
+def category_choice_kb(categories) -> ReplyKeyboardMarkup:
+    rows = []
+    for index in range(0, len(categories), 2):
+        rows.append([KeyboardButton(text=category) for category in categories[index : index + 2]])
+    rows.append([KeyboardButton(text="✏️ Новая категория")])
+    return with_cancel_kb(*rows)
+
+
 def payment_done_kb(payment_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="✅ Оплачено", callback_data=f"pay_done:{payment_id}")]]
@@ -290,6 +301,7 @@ def report_menu_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=BACK_TEXT), KeyboardButton(text="📋 Все операции")],
+            [KeyboardButton(text="📂 Категории")],
         ],
         resize_keyboard=True,
     )
@@ -361,3 +373,15 @@ def transaction_type_edit_kb(transaction_id: int) -> InlineKeyboardMarkup:
             ]
         ]
     )
+
+
+def report_categories_kb(categories, scope: str = "all") -> InlineKeyboardMarkup | None:
+    rows = []
+    from urllib.parse import quote
+
+    for category in categories:
+        encoded = quote(category, safe="")
+        rows.append([InlineKeyboardButton(text=category, callback_data=f"report_cat:{scope}:{encoded}")])
+    if not rows:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=rows)
