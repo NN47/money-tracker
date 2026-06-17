@@ -8,7 +8,6 @@ from aiogram.types import CallbackQuery, Message
 from database import dict_cursor, get_connection
 from keyboards.main import (
     BACK_TEXT,
-    dashboard_actions_kb,
     main_menu_kb,
     report_delete_confirm_kb,
     report_edit_fields_kb,
@@ -17,8 +16,8 @@ from keyboards.main import (
     transaction_type_edit_kb,
 )
 from services.dates import parse_transaction_date
+from handlers.home import send_main_screen
 from services.reports import (
-    build_dashboard,
     build_summary_report,
     build_transactions_report,
     fetch_recent_transactions,
@@ -117,8 +116,7 @@ async def report_back(message: Message, state: FSMContext):
     current_state = await state.get_state()
     if current_state is not None:
         return
-    await message.answer(build_dashboard(), reply_markup=dashboard_actions_kb(), parse_mode="HTML")
-    await message.answer("Главное меню:", reply_markup=main_menu_kb())
+    await send_main_screen(message, state)
 
 
 @router.callback_query(F.data.startswith("report_tx:"))

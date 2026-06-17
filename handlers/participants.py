@@ -4,7 +4,8 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
 from database import dict_cursor, get_connection
-from keyboards.main import main_menu_kb, participants_menu_kb
+from handlers.home import send_main_screen
+from keyboards.main import participants_menu_kb
 
 router = Router()
 
@@ -100,5 +101,4 @@ async def delete_participant_finish(message: Message, state: FSMContext):
 
 @router.message(F.text == "⬅️ Назад")
 async def back_to_main(message: Message, state: FSMContext):
-    await state.clear()
-    await message.answer("Главное меню:", reply_markup=main_menu_kb())
+    await send_main_screen(message, state)

@@ -15,13 +15,13 @@ from keyboards.main import (
     calendar_kb,
     cancel_kb,
     date_choice_kb,
-    dashboard_actions_kb,
     main_menu_kb,
     section_menu_kb,
     skip_comment_kb,
 )
 from services.dates import parse_transaction_date
-from services.reports import build_dashboard, build_summary_report, fetch_recent_transactions
+from handlers.home import send_main_screen
+from services.reports import build_summary_report, fetch_recent_transactions
 
 router = Router()
 
@@ -46,9 +46,7 @@ def parse_date_ru(raw: str) -> date:
 
 
 async def _back_to_home(message: Message, state: FSMContext):
-    await state.clear()
-    await message.answer(build_dashboard(), reply_markup=dashboard_actions_kb())
-    await message.answer("Главное меню:", reply_markup=main_menu_kb())
+    await send_main_screen(message, state)
 
 
 @router.message(F.text == CANCEL_TEXT)
