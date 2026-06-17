@@ -58,10 +58,10 @@ def _format_transaction_details(transaction) -> str:
     comment = transaction.get("comment") or "без комментария"
     return (
         f"<b>{html.escape(_type_label(transaction['type']).capitalize())}</b>\n"
-        f"Сумма: <b>{sign}{money(float(transaction['amount']))} ₽</b>\n"
-        f"Категория: <b>{html.escape(transaction['category'] or 'Без категории')}</b>\n"
-        f"Дата: <b>{transaction['operation_date'].strftime('%d.%m.%Y')}</b>\n"
-        f"Комментарий: {html.escape(comment)}"
+        f"<b>Сумма:</b> <b>{sign}{money(float(transaction['amount']))} ₽</b>\n"
+        f"<b>Категория:</b> <b>{html.escape(transaction['category'] or 'Без категории')}</b>\n"
+        f"<b>Дата:</b> <b>{transaction['operation_date'].strftime('%d.%m.%Y')}</b>\n"
+        f"<b>Комментарий:</b> {html.escape(comment)}"
     )
 
 
@@ -74,7 +74,7 @@ def _parse_money(raw: str) -> float:
 
 async def _send_report(message: Message, tx_type: str | None = None) -> None:
     transactions = fetch_recent_transactions(tx_type=tx_type)
-    await message.answer("Меню отчёта:", reply_markup=report_menu_kb())
+    await message.answer("<b>Меню отчёта:</b>", reply_markup=report_menu_kb(), parse_mode="HTML")
     await message.answer(
         build_summary_report(transactions=transactions, tx_type=tx_type),
         reply_markup=report_transactions_kb(transactions),

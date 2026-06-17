@@ -81,14 +81,14 @@ class RecurringEditStates(StatesGroup):
     waiting_comment = State()
 
 
-async def send_callback_message(callback: CallbackQuery, text: str, reply_markup=None) -> None:
+async def send_callback_message(callback: CallbackQuery, text: str, reply_markup=None, parse_mode: str | None = None) -> None:
     if callback.message:
         try:
-            await callback.message.answer(text, reply_markup=reply_markup)
+            await callback.message.answer(text, reply_markup=reply_markup, parse_mode=parse_mode)
             return
         except Exception:
             logger.exception("Failed to send callback reply in chat; falling back to private message")
-    await callback.bot.send_message(callback.from_user.id, text, reply_markup=reply_markup)
+    await callback.bot.send_message(callback.from_user.id, text, reply_markup=reply_markup, parse_mode=parse_mode)
 
 
 async def remove_inline_keyboard(callback: CallbackQuery) -> None:
@@ -116,7 +116,7 @@ async def _back_to_home(message: Message, state: FSMContext):
     unpaid_operations = fetch_unpaid_due_recurring_payments()
     due_kb = recurring_due_kb(unpaid_operations)
     extra_rows = due_kb.inline_keyboard if due_kb else None
-    await message.answer(build_dashboard(), reply_markup=dashboard_actions_kb(extra_rows))
+    await message.answer(build_dashboard(), reply_markup=dashboard_actions_kb(extra_rows), parse_mode="HTML")
     await message.answer("Главное меню:", reply_markup=main_menu_kb())
 
 
@@ -465,14 +465,14 @@ async def recurring_payment_mark_paid(callback: CallbackQuery):
             f"Платёж «{title}» записан в расходы ✅",
             reply_markup=main_menu_kb(),
         )
-        await send_callback_message(callback, build_dashboard(), reply_markup=recurring_due_kb(unpaid_operations))
+        await send_callback_message(callback, build_dashboard(), reply_markup=recurring_due_kb(unpaid_operations), parse_mode="HTML")
         return
 
     if status == "already_paid":
         await remove_inline_keyboard(callback)
         unpaid_operations = fetch_unpaid_due_recurring_payments()
         await send_callback_message(callback, "Этот платёж уже учтён ✅", reply_markup=main_menu_kb())
-        await send_callback_message(callback, build_dashboard(), reply_markup=recurring_due_kb(unpaid_operations))
+        await send_callback_message(callback, build_dashboard(), reply_markup=recurring_due_kb(unpaid_operations), parse_mode="HTML")
         return
 
     await send_callback_message(callback, "Этот платёж не найден или отключён.")
