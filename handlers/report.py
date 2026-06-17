@@ -85,7 +85,7 @@ async def _send_report(message: Message, tx_type: str | None = None, state: FSMC
     await message.answer("<b>Меню отчёта:</b>", reply_markup=report_menu_kb(), parse_mode="HTML")
     await message.answer(
         build_summary_report(transactions=transactions, tx_type=tx_type),
-        reply_markup=report_transactions_kb(transactions),
+        reply_markup=report_transactions_kb(transactions, scope=tx_type or "all"),
         parse_mode="HTML",
     )
 
@@ -157,6 +157,27 @@ async def report_back(message: Message, state: FSMContext):
     if current_state is not None:
         return
     await send_main_screen(message, state)
+
+
+@router.callback_query(F.data.startswith("report_edit_recent:"))
+async def report_edit_recent(callback: CallbackQuery):
+    try:
+        scope = callback.data.split(":", maxsplit=1)[1]
+    except (AttributeError, IndexError):
+        scope = "all"
+    tx_type = scope if scope in {"income", "expense"} else None
+    transactions = fetch_recent_transactions(tx_type=tx_type)
+
+    if not transactions:
+        await callback.answer("Операций пока нет", show_alert=True)
+        return
+
+    await callback.answer("Выберите операцию")
+    if callback.message:
+        await callback.message.answer(
+            "Выберите операцию из последних 10, чтобы отредактировать:",
+            reply_markup=report_transactions_kb(transactions, scope=scope, include_edit_button=False),
+        )
 
 
 @router.callback_query(F.data.startswith("report_tx:"))
