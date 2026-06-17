@@ -126,21 +126,21 @@ def build_dashboard() -> str:
         "💼 Главный экран",
         "",
         f"📊 <b>{format_russian_month_year(today)}</b>",
-        f"<b>Доходы:</b> <b>{money(income)} ₽</b>",
-        f"<b>Расходы:</b> <b>{money(expense)} ₽</b>",
-        f"<b>Баланс:</b> <b>{money(balance)} ₽</b>",
+        f"💰 <b>Доходы:</b> <b>{money(income)} ₽</b>",
+        f"💸 <b>Расходы:</b> <b>{money(expense)} ₽</b>",
+        f"⚖️ <b>Баланс:</b> <b>{money(balance)} ₽</b>",
     ]
     if unpaid_today:
-        lines.extend(["", "🔥 Сегодня к оплате:"])
+        lines.extend(["", "<b>🔥 Сегодня к оплате:</b>"])
         lines.extend([f"• {html.escape(r['title'])} — <b>{money(float(r['amount']))} ₽</b>" for r in unpaid_today])
     if paid_today:
-        lines.extend(["", "✅ Сегодня оплачено:"])
+        lines.extend(["", "<b>✅ Сегодня оплачено:</b>"])
         lines.extend([f"• {html.escape(r['title'])} — <b>{money(float(r['amount']))} ₽</b>" for r in paid_today])
     overdue = sorted([*overdue_payments, *overdue_recurring], key=lambda row: (row["payment_date"], row["id"]))[:10]
     if overdue:
-        lines.extend(["", "⚠️ Просроченные платежи:"])
+        lines.extend(["", "<b>⚠️ Просроченные платежи:</b>"])
         lines.extend([_format_payment_line(r, include_year=True) for r in overdue])
-    lines.extend(["", "📅 Платежи в ближайшие 10 дней:"])
+    lines.extend(["", "<b>📅 Платежи в ближайшие 10 дней:</b>"])
     upcoming_payments = sorted([*payments, *recurring], key=lambda row: (row["payment_date"], row["id"]))[:10]
     if upcoming_payments:
         for r in upcoming_payments:
@@ -148,7 +148,7 @@ def build_dashboard() -> str:
     else:
         lines.append("Нет платежей")
     lines.append("")
-    lines.append("🔁 Постоянные операции:")
+    lines.append("<b>🔁 Постоянные операции:</b>")
     if active_recurring:
         lines.extend([f"{r['day_of_month']} число — {html.escape(r['title'])} — <b>{money(float(r['amount']))} ₽</b>" for r in active_recurring])
     else:
@@ -191,7 +191,7 @@ def _format_transaction_line(row, start: date, end: date) -> str:
     tx_date = _format_transaction_date(row["operation_date"], start, end)
     category = html.escape(row["category"] or "Без категории")
     comment = f" — {html.escape(row['comment'])}" if row.get("comment") else ""
-    return f"{tx_date} <b>{sign}{money(float(row['amount']))} ₽</b> — {category}{comment}"
+    return f"<b>{tx_date}</b> <b>{sign}{money(float(row['amount']))} ₽</b> — <b>{category}</b>{comment}"
 
 
 def build_summary_report(transactions=None, tx_type: str | None = None) -> str:
@@ -201,21 +201,21 @@ def build_summary_report(transactions=None, tx_type: str | None = None) -> str:
     start, nxt = month_bounds(today)
     if tx_type == "income":
         title = "📊 <b>Отчёт по доходам</b>"
-        total_lines = [f"<b>Доходы:</b> {money(income)} ₽"]
-        recent_title = "<b>Последние 10 доходов:</b>"
+        total_lines = [f"💰 <b>Доходы:</b> <b>{money(income)} ₽</b>"]
+        recent_title = "<b>💵 Последние 10 доходов:</b>"
     elif tx_type == "expense":
         title = "📊 <b>Отчёт по расходам</b>"
-        total_lines = [f"<b>Расходы:</b> {money(expense)} ₽"]
-        recent_title = "<b>Последние 10 расходов:</b>"
+        total_lines = [f"💸 <b>Расходы:</b> <b>{money(expense)} ₽</b>"]
+        recent_title = "<b>🧾 Последние 10 расходов:</b>"
     else:
         title = "📊 <b>Отчёт</b>"
         total_lines = [
-            f"<b>Доходы:</b> {money(income)} ₽",
-            f"<b>Расходы:</b> {money(expense)} ₽",
-            f"<b>Баланс:</b> {money(balance)} ₽",
+            f"💰 <b>Доходы:</b> <b>{money(income)} ₽</b>",
+            f"💸 <b>Расходы:</b> <b>{money(expense)} ₽</b>",
+            f"⚖️ <b>Баланс:</b> <b>{money(balance)} ₽</b>",
         ]
-        recent_title = "<b>Последние 10 операций:</b>"
-    lines = [title, "", f"<b>Период:</b> {format_russian_month_year(today)}", *total_lines, "", recent_title]
+        recent_title = "<b>🧾 Последние 10 операций:</b>"
+    lines = [title, "", f"🗓 <b>Период:</b> <b>{format_russian_month_year(today)}</b>", *total_lines, "", recent_title]
     if tx:
         for row in tx:
             lines.append(_format_transaction_line(row, start, nxt))
@@ -225,11 +225,11 @@ def build_summary_report(transactions=None, tx_type: str | None = None) -> str:
         lines.append("")
         overdue = sorted([*overdue_payments, *overdue_recurring], key=lambda row: (row["payment_date"], row["id"]))[:10]
         if overdue:
-            lines.append("<b>Просроченные платежи:</b>")
+            lines.append("<b>⚠️ Просроченные платежи:</b>")
             for r in overdue:
                 lines.append(_format_payment_line(r, include_year=True))
             lines.append("")
-        lines.append(f"<b>Ближайшие платежи на {UPCOMING_PAYMENTS_DAYS} дней:</b>")
+        lines.append(f"<b>📅 Ближайшие платежи на {UPCOMING_PAYMENTS_DAYS} дней:</b>")
         upcoming_payments = sorted([*payments, *recurring], key=lambda row: (row["payment_date"], row["id"]))[:10]
         if upcoming_payments:
             for r in upcoming_payments:
@@ -340,7 +340,7 @@ def build_transactions_report(limit: int = 50, transactions=None, tx_type: str |
     today = date.today()
     start, nxt = month_bounds(today)
     tx = fetch_recent_transactions(limit=limit, tx_type=tx_type) if transactions is None else transactions
-    lines = ["📋 <b>Все операции</b>", ""]
+    lines = ["📋 <b>Все операции</b>", "", "<b>🧾 Список операций:</b>"]
     if not tx:
         lines.append("Операций пока нет")
         return "\n".join(lines)
