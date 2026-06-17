@@ -146,7 +146,7 @@ def build_dashboard() -> str:
         for r in upcoming_payments:
             lines.append(_format_payment_line(r))
     else:
-        lines.append(f"Нет неоплаченных платежей на {UPCOMING_PAYMENTS_DAYS} дней")
+        lines.append("Нет платежей")
     lines.append("")
     lines.append("🔁 Постоянные операции:")
     if active_recurring:
@@ -235,7 +235,7 @@ def build_summary_report(transactions=None, tx_type: str | None = None) -> str:
             for r in upcoming_payments:
                 lines.append(_format_payment_line(r))
         else:
-            lines.append("Нет неоплаченных платежей")
+            lines.append("Нет платежей")
     return "\n".join(lines)
 
 
