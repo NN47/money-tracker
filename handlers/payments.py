@@ -40,6 +40,7 @@ from services.recurring_payments import (
     fetch_all_active_recurring_operations,
     fetch_unpaid_due_recurring_payments,
     mark_recurring_payment_paid,
+    mark_scheduled_payment_paid,
     moscow_today,
     update_recurring_operation,
 )
@@ -414,25 +415,22 @@ async def payment_mark_done(callback: CallbackQuery):
     await callback.answer("Отмечаю платёж…")
 
     try:
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                "UPDATE scheduled_payments SET is_paid = TRUE WHERE id = %s RETURNING title",
-                (payment_id,),
-            )
-            row = cur.fetchone()
-            cur.close()
+        result = mark_scheduled_payment_paid(payment_id)
     except Exception:
         logger.exception("Failed to mark scheduled payment %s as paid", payment_id)
-        await send_callback_message(callback, "Не получилось отметить платёж. Попробуйте ещё раз.")
+        await send_callback_message(callback, "Не получилось отметить платёж и записать расход. Попробуйте ещё раз.")
         return
 
-    if not row:
-        await send_callback_message(callback, "Этот платёж не найден или уже удалён.")
+    if result["status"] != "paid":
+        await send_callback_message(callback, "Этот платёж не найден или уже оплачен.")
         return
 
     await remove_inline_keyboard(callback)
-    await send_callback_message(callback, f"Платёж «{row[0]}» отмечен как оплаченный ✅", reply_markup=main_menu_kb())
+    await send_callback_message(
+        callback,
+        f"Платёж «{result['title']}» отмечен как оплаченный и записан в расходы ✅",
+        reply_markup=main_menu_kb(),
+    )
 
 
 @router.callback_query(F.data.startswith("pay_recurring:"))

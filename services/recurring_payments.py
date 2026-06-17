@@ -176,6 +176,40 @@ def fetch_unpaid_due_recurring_payments(payment_date: date | None = None):
     return rows
 
 
+def mark_scheduled_payment_paid(payment_id: int) -> dict:
+    today = moscow_today()
+    with get_connection() as conn:
+        cur = dict_cursor(conn)
+        cur.execute(
+            """
+            UPDATE scheduled_payments
+            SET is_paid = TRUE
+            WHERE id = %s
+              AND is_paid = FALSE
+            RETURNING title, amount
+            """,
+            (payment_id,),
+        )
+        payment = cur.fetchone()
+        if not payment:
+            cur.close()
+            return {"status": "not_found"}
+
+        amount = payment["amount"]
+        if isinstance(amount, Decimal):
+            amount = str(amount)
+
+        cur.execute(
+            """
+            INSERT INTO transactions(type, amount, category, comment, operation_date)
+            VALUES('expense', %s, %s, %s, %s)
+            """,
+            (amount, DEFAULT_PAYMENT_CATEGORY, payment["title"], today),
+        )
+        cur.close()
+    return {"status": "paid", "title": payment["title"]}
+
+
 def mark_recurring_payment_paid(recurring_operation_id: int, payment_date: date | None = None) -> dict:
     today = moscow_today()
     requested_payment_date = payment_date
