@@ -1,11 +1,14 @@
 import calendar
+from datetime import date
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
 CANCEL_TEXT = "❌ Отмена"
 BACK_TEXT = "⬅️ Назад"
+HOME_TEXT = "🏠 Главное меню"
 MAIN_MENU_TEXTS = {
     "💼 Главный экран",
+    HOME_TEXT,
     "💰 Доходы",
     "💸 Расходы",
     "➕ Доход",
@@ -26,7 +29,7 @@ MAIN_MENU_TEXTS = {
 
 def calendar_back_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=BACK_TEXT)]],
+        keyboard=[[KeyboardButton(text=BACK_TEXT), KeyboardButton(text=HOME_TEXT)]],
         resize_keyboard=True,
         one_time_keyboard=True,
     )
@@ -53,6 +56,13 @@ def _calendar_callback(prefix: str, action: str, year: int, month: int, day: int
     return f"cal:{prefix}:{action}:{year}:{month}:{day}"
 
 
+def _format_calendar_day(day: int, mark: str | None, is_today: bool) -> str:
+    text = f"{day} {mark}" if mark else str(day)
+    if is_today:
+        return f"📍 {text}"
+    return text
+
+
 def calendar_kb(
     prefix: str,
     year: int,
@@ -61,19 +71,20 @@ def calendar_kb(
 ) -> InlineKeyboardMarkup:
     marked_days = marked_days or set()
     day_marks = marked_days if isinstance(marked_days, dict) else {day: "•" for day in marked_days}
+    today = date.today()
     previous_year, previous_month = (year - 1, 12) if month == 1 else (year, month - 1)
     next_year, next_month = (year + 1, 1) if month == 12 else (year, month + 1)
 
     rows = [
         [
             InlineKeyboardButton(
-                text=f"{MONTH_NAMES[month]} {year}",
+                text=f"🗓 {MONTH_NAMES[month].upper()} {year}",
                 callback_data=_calendar_callback(prefix, "noop", year, month),
             )
         ],
         [
             InlineKeyboardButton(
-                text=weekday,
+                text=f"▪️{weekday}",
                 callback_data=_calendar_callback(prefix, "noop", year, month),
             )
             for weekday in WEEKDAY_NAMES
@@ -81,30 +92,36 @@ def calendar_kb(
     ]
 
     for week in calendar.Calendar(firstweekday=0).monthdayscalendar(year, month):
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=(f"{day_marks[day]} {day}" if day in day_marks else str(day)) if day else " ",
-                    callback_data=_calendar_callback(
-                        prefix,
-                        "select" if day else "noop",
-                        year,
-                        month,
-                        day,
-                    ),
+        row = []
+        for day in week:
+            if not day:
+                if row:
+                    continue
+                row.append(
+                    InlineKeyboardButton(
+                        text="·",
+                        callback_data=_calendar_callback(prefix, "noop", year, month),
+                    )
                 )
-                for day in week
-            ]
-        )
+                continue
+
+            row.append(
+                InlineKeyboardButton(
+                    text=_format_calendar_day(day, day_marks.get(day), today == date(year, month, day)),
+                    callback_data=_calendar_callback(prefix, "select", year, month, day),
+                )
+            )
+        if row:
+            rows.append(row)
 
     rows.append(
         [
             InlineKeyboardButton(
-                text="◀️",
+                text="⬅️ Пред.",
                 callback_data=_calendar_callback(prefix, "month", previous_year, previous_month),
             ),
             InlineKeyboardButton(
-                text="▶️",
+                text="След. ➡️",
                 callback_data=_calendar_callback(prefix, "month", next_year, next_month),
             ),
         ]

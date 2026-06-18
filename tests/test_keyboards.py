@@ -4,6 +4,7 @@ import unittest
 from keyboards.main import (
     BACK_TEXT,
     CANCEL_TEXT,
+    HOME_TEXT,
     back_kb,
     calendar_back_kb,
     calendar_kb,
@@ -16,35 +17,42 @@ from keyboards.main import (
 
 
 class CalendarKeyboardTest(unittest.TestCase):
-    def test_calendar_reply_keyboard_contains_only_back_button(self):
+    def test_calendar_reply_keyboard_contains_context_buttons(self):
         keyboard = calendar_back_kb()
 
         self.assertEqual(len(keyboard.keyboard), 1)
-        self.assertEqual(len(keyboard.keyboard[0]), 1)
+        self.assertEqual(len(keyboard.keyboard[0]), 2)
         self.assertEqual(keyboard.keyboard[0][0].text, BACK_TEXT)
+        self.assertEqual(keyboard.keyboard[0][1].text, HOME_TEXT)
 
     def test_calendar_inline_keyboard_has_navigation_without_close_button(self):
         keyboard = calendar_kb("tx", 2026, 6)
         button_texts = [button.text for row in keyboard.inline_keyboard for button in row]
 
-        self.assertIn("◀️", button_texts)
-        self.assertIn("▶️", button_texts)
+        self.assertIn("⬅️ Пред.", button_texts)
+        self.assertIn("След. ➡️", button_texts)
         self.assertNotIn("Закрыть", button_texts)
 
     def test_calendar_inline_keyboard_marks_event_days(self):
         keyboard = calendar_kb("events", 2026, 6, marked_days={12})
         button_texts = [button.text for row in keyboard.inline_keyboard for button in row]
 
-        self.assertIn("• 12", button_texts)
+        self.assertIn("12 •", button_texts)
         self.assertNotIn("12", button_texts)
 
     def test_calendar_inline_keyboard_marks_income_and_expense_days(self):
-        keyboard = calendar_kb("events", 2026, 6, marked_days={10: "+", 12: "-", 15: "±"})
+        keyboard = calendar_kb("events", 2026, 6, marked_days={10: "🟢", 12: "🔴", 15: "🟢🔴"})
         button_texts = [button.text for row in keyboard.inline_keyboard for button in row]
 
-        self.assertIn("+ 10", button_texts)
-        self.assertIn("- 12", button_texts)
-        self.assertIn("± 15", button_texts)
+        self.assertIn("10 🟢", button_texts)
+        self.assertIn("12 🔴", button_texts)
+        self.assertIn("15 🟢🔴", button_texts)
+
+    def test_calendar_inline_keyboard_omits_trailing_empty_cells(self):
+        keyboard = calendar_kb("events", 2026, 6)
+        june_29_row = next(row for row in keyboard.inline_keyboard if row[0].text == "29")
+
+        self.assertEqual([button.text for button in june_29_row], ["29", "30"])
 
 
 class BackKeyboardTest(unittest.TestCase):
