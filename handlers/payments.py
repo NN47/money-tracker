@@ -416,7 +416,7 @@ async def payment_mark_done(callback: CallbackQuery):
     await callback.answer("Отмечаю платёж…")
 
     try:
-        result = mark_scheduled_payment_paid(payment_id)
+        result = await asyncio.to_thread(mark_scheduled_payment_paid, payment_id)
     except Exception:
         logger.exception("Failed to mark scheduled payment %s as paid", payment_id)
         await send_callback_message(callback, "Не получилось отметить платёж и записать расход. Попробуйте ещё раз.")
@@ -447,7 +447,7 @@ async def recurring_payment_mark_paid(callback: CallbackQuery):
     await callback.answer("Записываю платёж…")
 
     try:
-        result = mark_recurring_payment_paid(operation_id, payment_date)
+        result = await asyncio.to_thread(mark_recurring_payment_paid, operation_id, payment_date)
     except Exception:
         logger.exception("Failed to mark recurring operation %s as paid", operation_id)
         await send_callback_message(callback, "Не получилось записать платёж в расходы. Попробуйте ещё раз.")
@@ -458,20 +458,22 @@ async def recurring_payment_mark_paid(callback: CallbackQuery):
     if status == "paid":
         title = result["title"]
         await remove_inline_keyboard(callback)
-        unpaid_operations = fetch_unpaid_due_recurring_payments()
+        unpaid_operations = await asyncio.to_thread(fetch_unpaid_due_recurring_payments)
         await send_callback_message(
             callback,
             f"Платёж «{title}» записан в расходы ✅",
             reply_markup=main_menu_kb(),
         )
-        await send_callback_message(callback, build_dashboard(), reply_markup=recurring_due_kb(unpaid_operations), parse_mode="HTML")
+        dashboard = await asyncio.to_thread(build_dashboard)
+        await send_callback_message(callback, dashboard, reply_markup=recurring_due_kb(unpaid_operations), parse_mode="HTML")
         return
 
     if status == "already_paid":
         await remove_inline_keyboard(callback)
-        unpaid_operations = fetch_unpaid_due_recurring_payments()
+        unpaid_operations = await asyncio.to_thread(fetch_unpaid_due_recurring_payments)
         await send_callback_message(callback, "Этот платёж уже учтён ✅", reply_markup=main_menu_kb())
-        await send_callback_message(callback, build_dashboard(), reply_markup=recurring_due_kb(unpaid_operations), parse_mode="HTML")
+        dashboard = await asyncio.to_thread(build_dashboard)
+        await send_callback_message(callback, dashboard, reply_markup=recurring_due_kb(unpaid_operations), parse_mode="HTML")
         return
 
     await send_callback_message(callback, "Этот платёж не найден или отключён.")
