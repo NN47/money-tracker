@@ -33,6 +33,29 @@ class UpcomingRecurringPaymentsTest(unittest.TestCase):
         self.assertEqual(result[0]["payment_date"], date(2026, 6, 15))
         self.assertEqual(result[1]["payment_date"], date(2026, 6, 16))
 
+    def test_upcoming_recurring_payments_skips_paid_payment_dates(self):
+        rows = [
+            {
+                "id": 1,
+                "title": "paid today",
+                "amount": 100,
+                "day_of_month": 15,
+                "paid_payment_dates": [date(2026, 6, 15)],
+            },
+            {
+                "id": 2,
+                "title": "unpaid tomorrow",
+                "amount": 100,
+                "day_of_month": 16,
+                "paid_payment_dates": [date(2026, 5, 16)],
+            },
+        ]
+
+        result = upcoming_recurring_payments(rows, date(2026, 6, 15), date(2026, 6, 25))
+
+        self.assertEqual([row["title"] for row in result], ["unpaid tomorrow"])
+        self.assertNotIn("paid_payment_dates", result[0])
+
 
 class OverduePaymentsReportTest(unittest.TestCase):
     def test_summary_report_shows_overdue_payments(self):
