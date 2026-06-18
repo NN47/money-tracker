@@ -53,11 +53,11 @@ def fetch_calendar_marked_days(year: int, month: int) -> dict[int, str]:
         transaction_marks = {}
         for row in cur.fetchall():
             if row["has_income"] and row["has_expense"]:
-                transaction_marks[row["day"]] = "±"
+                transaction_marks[row["day"]] = "🟢🔴"
             elif row["has_income"]:
-                transaction_marks[row["day"]] = "+"
+                transaction_marks[row["day"]] = "🟢"
             elif row["has_expense"]:
-                transaction_marks[row["day"]] = "-"
+                transaction_marks[row["day"]] = "🔴"
 
         cur.execute(
             """

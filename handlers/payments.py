@@ -264,8 +264,8 @@ async def calendar_events_start(message: Message, state: FSMContext):
     await state.clear()
     today = date.today()
     await message.answer(
-        "📅 Календарь событий. Дни с событиями отмечены точкой. Выберите дату, чтобы посмотреть детали.",
-        reply_markup=main_menu_kb(),
+        "📅 Календарь событий. 🟢 — доходы, 🔴 — расходы, 📍 — сегодня. Выберите дату, чтобы посмотреть детали.",
+        reply_markup=calendar_back_kb(),
     )
     await message.answer("Календарь:", reply_markup=calendar_events_kb(today.year, today.month))
 
@@ -303,7 +303,7 @@ async def calendar_events(callback: CallbackQuery):
         return
 
     events = fetch_calendar_day_events(selected_date)
-    await send_callback_message(callback, build_calendar_day_events(selected_date, events), reply_markup=main_menu_kb())
+    await send_callback_message(callback, build_calendar_day_events(selected_date, events), reply_markup=calendar_back_kb())
     await callback.answer("События загружены")
 
 

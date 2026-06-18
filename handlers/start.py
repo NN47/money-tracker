@@ -13,6 +13,6 @@ async def cmd_start(message: Message, state: FSMContext):
     await send_main_screen(message, state)
 
 
-@router.message(F.text == "💼 Главный экран")
+@router.message(F.text.in_({"💼 Главный экран", "🏠 Главное меню"}))
 async def main_screen(message: Message, state: FSMContext):
     await send_main_screen(message, state)
