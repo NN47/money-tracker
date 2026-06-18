@@ -46,6 +46,7 @@ from services.recurring_payments import (
     update_recurring_operation,
 )
 from services.reports import build_dashboard, fetch_categories, money
+from handlers.home import dashboard_due_action_rows, fetch_unpaid_due_scheduled_payments
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -113,12 +114,18 @@ def parse_flexible_date(raw: str) -> date:
     return parse_future_date(raw)
 
 
+def build_dashboard_reply_markup(scheduled_payments=None, unpaid_operations=None):
+    if scheduled_payments is None:
+        scheduled_payments = fetch_unpaid_due_scheduled_payments()
+    if unpaid_operations is None:
+        unpaid_operations = fetch_unpaid_due_recurring_payments()
+    extra_rows = dashboard_due_action_rows(scheduled_payments, unpaid_operations)
+    return dashboard_actions_kb(extra_rows)
+
+
 async def _back_to_home(message: Message, state: FSMContext):
     await state.clear()
-    unpaid_operations = fetch_unpaid_due_recurring_payments()
-    due_kb = recurring_due_kb(unpaid_operations)
-    extra_rows = due_kb.inline_keyboard if due_kb else None
-    await message.answer(build_dashboard(), reply_markup=dashboard_actions_kb(extra_rows), parse_mode="HTML")
+    await message.answer(build_dashboard(), reply_markup=build_dashboard_reply_markup(), parse_mode="HTML")
     await message.answer("Главное меню:", reply_markup=main_menu_kb())
 
 
@@ -458,22 +465,38 @@ async def recurring_payment_mark_paid(callback: CallbackQuery):
     if status == "paid":
         title = result["title"]
         await remove_inline_keyboard(callback)
-        unpaid_operations = await asyncio.to_thread(fetch_unpaid_due_recurring_payments)
+        scheduled_payments, unpaid_operations, dashboard = await asyncio.gather(
+            asyncio.to_thread(fetch_unpaid_due_scheduled_payments),
+            asyncio.to_thread(fetch_unpaid_due_recurring_payments),
+            asyncio.to_thread(build_dashboard),
+        )
         await send_callback_message(
             callback,
             f"Платёж «{title}» записан в расходы ✅",
             reply_markup=main_menu_kb(),
         )
-        dashboard = await asyncio.to_thread(build_dashboard)
-        await send_callback_message(callback, dashboard, reply_markup=recurring_due_kb(unpaid_operations), parse_mode="HTML")
+        await send_callback_message(
+            callback,
+            dashboard,
+            reply_markup=build_dashboard_reply_markup(scheduled_payments, unpaid_operations),
+            parse_mode="HTML",
+        )
         return
 
     if status == "already_paid":
         await remove_inline_keyboard(callback)
-        unpaid_operations = await asyncio.to_thread(fetch_unpaid_due_recurring_payments)
+        scheduled_payments, unpaid_operations, dashboard = await asyncio.gather(
+            asyncio.to_thread(fetch_unpaid_due_scheduled_payments),
+            asyncio.to_thread(fetch_unpaid_due_recurring_payments),
+            asyncio.to_thread(build_dashboard),
+        )
         await send_callback_message(callback, "Этот платёж уже учтён ✅", reply_markup=main_menu_kb())
-        dashboard = await asyncio.to_thread(build_dashboard)
-        await send_callback_message(callback, dashboard, reply_markup=recurring_due_kb(unpaid_operations), parse_mode="HTML")
+        await send_callback_message(
+            callback,
+            dashboard,
+            reply_markup=build_dashboard_reply_markup(scheduled_payments, unpaid_operations),
+            parse_mode="HTML",
+        )
         return
 
     await send_callback_message(callback, "Этот платёж не найден или отключён.")
