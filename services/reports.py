@@ -68,14 +68,21 @@ def _next_recurring_date(day_of_month: int | None, today: date) -> date | None:
     return None
 
 
+def _paid_payment_dates(row) -> set[date]:
+    return {payment_date for payment_date in row.get("paid_payment_dates") or [] if payment_date}
+
+
 def upcoming_recurring_payments(rows, today: date, horizon: date):
     upcoming = []
     for row in rows:
         next_date = _next_recurring_date(row.get("day_of_month"), today)
         if next_date is None or next_date > horizon:
             continue
+        if next_date in _paid_payment_dates(row):
+            continue
         item = dict(row)
         item["payment_date"] = next_date
+        item.pop("paid_payment_dates", None)
         upcoming.append(item)
     return sorted(upcoming, key=lambda row: (row["payment_date"], row["id"]))
 
@@ -107,7 +114,30 @@ def _fetch_main_data():
         overdue_payments = cur.fetchall()
         cur.execute("SELECT id, title, amount, payment_date FROM scheduled_payments WHERE is_paid=FALSE AND payment_date BETWEEN %s AND %s ORDER BY payment_date LIMIT 10", (today, horizon))
         payments = cur.fetchall()
-        cur.execute("SELECT id, title, type, amount, day_of_month FROM recurring_operations WHERE is_active=TRUE AND type IN ('payment', 'expense') ORDER BY day_of_month, id")
+        cur.execute(
+            """
+            SELECT
+                ro.id,
+                ro.title,
+                ro.type,
+                ro.amount,
+                ro.day_of_month,
+                COALESCE(
+                    array_agg(l.payment_date ORDER BY l.payment_date)
+                        FILTER (WHERE l.payment_date IS NOT NULL),
+                    ARRAY[]::date[]
+                ) AS paid_payment_dates
+            FROM recurring_operations ro
+            LEFT JOIN recurring_payments_log l
+                ON l.recurring_operation_id = ro.id
+               AND l.payment_date BETWEEN %s AND %s
+            WHERE ro.is_active=TRUE
+              AND ro.type IN ('payment', 'expense')
+            GROUP BY ro.id, ro.title, ro.type, ro.amount, ro.day_of_month
+            ORDER BY ro.day_of_month, ro.id
+            """,
+            (today, horizon),
+        )
         payable_recurring = cur.fetchall()
         cur.execute("SELECT id, title, amount, day_of_month FROM recurring_operations WHERE is_active=TRUE ORDER BY day_of_month NULLS LAST, id LIMIT 10")
         active_recurring = cur.fetchall()
