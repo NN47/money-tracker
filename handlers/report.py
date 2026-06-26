@@ -2,6 +2,7 @@ import html
 from urllib.parse import unquote
 
 from aiogram import F, Router
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
@@ -154,11 +155,8 @@ async def all_transactions(message: Message, state: FSMContext):
     )
 
 
-@router.message(F.text == BACK_TEXT)
+@router.message(StateFilter(None), F.text == BACK_TEXT)
 async def report_back(message: Message, state: FSMContext):
-    current_state = await state.get_state()
-    if current_state is not None:
-        return
     await send_main_screen(message, state)
 
 
