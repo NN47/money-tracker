@@ -8,6 +8,7 @@ from keyboards.main import (
     back_kb,
     calendar_back_kb,
     calendar_kb,
+    recurring_day_choice_kb,
     recurring_due_kb,
     recurring_edit_fields_kb,
     recurring_payments_actions_kb,
@@ -113,6 +114,21 @@ class ReportKeyboardTest(unittest.TestCase):
 
 
 class RecurringPaymentsKeyboardTest(unittest.TestCase):
+    def test_recurring_day_choice_keyboard_is_compact_day_picker(self):
+        keyboard = recurring_day_choice_kb()
+
+        self.assertEqual([[button.text for button in row] for row in keyboard.inline_keyboard[:5]], [
+            ["1", "2", "3", "4", "5", "6", "7"],
+            ["8", "9", "10", "11", "12", "13", "14"],
+            ["15", "16", "17", "18", "19", "20", "21"],
+            ["22", "23", "24", "25", "26", "27", "28"],
+            ["29", "30", "31"],
+        ])
+        self.assertEqual(keyboard.inline_keyboard[-1][0].text, CANCEL_TEXT)
+        self.assertEqual(keyboard.inline_keyboard[-1][0].callback_data, "cancel_recurring_day")
+        self.assertNotIn("⬅️ Пред.", [button.text for row in keyboard.inline_keyboard for button in row])
+        self.assertNotIn("След. ➡️", [button.text for row in keyboard.inline_keyboard for button in row])
+
     def test_recurring_payments_actions_contains_only_edit_buttons(self):
         keyboard = recurring_payments_actions_kb([{"id": 1, "title": "Сбер кредит"}])
         button_texts = [button.text for row in keyboard.inline_keyboard for button in row]

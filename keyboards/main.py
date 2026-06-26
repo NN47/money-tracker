@@ -131,6 +131,19 @@ def calendar_kb(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def recurring_day_choice_kb() -> InlineKeyboardMarkup:
+    rows = []
+    for start in range(1, 32, 7):
+        rows.append(
+            [
+                InlineKeyboardButton(text=str(day), callback_data=f"rec_day:{day}")
+                for day in range(start, min(start + 7, 32))
+            ]
+        )
+    rows.append([InlineKeyboardButton(text=CANCEL_TEXT, callback_data="cancel_recurring_day")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def main_menu_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[

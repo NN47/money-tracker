@@ -15,6 +15,7 @@ from keyboards.main import (
     MAIN_MENU_TEXTS,
     calendar_back_kb,
     calendar_kb,
+    recurring_day_choice_kb,
     cancel_kb,
     category_choice_kb,
     dashboard_actions_kb,
@@ -853,39 +854,24 @@ async def recurring_amount(message: Message, state: FSMContext):
         await message.answer("Введите корректную сумму больше 0.")
         return
     await state.update_data(amount=amount)
-    today = date.today()
     await state.set_state(RecurringStates.waiting_day)
     await message.answer(
-        "Выберите день платежа в календаре или введите число месяца (1-31):",
-        reply_markup=calendar_back_kb(),
+        "📅 Выберите день ежемесячного платежа:\n\n"
+        "Можно нажать кнопку ниже или отправить число сообщением.",
+        reply_markup=recurring_day_choice_kb(),
     )
-    await message.answer("Календарь регулярных платежей:", reply_markup=calendar_kb("rec", today.year, today.month))
 
 
-@router.callback_query(F.data.startswith("cal:rec:"))
-async def recurring_calendar(callback: CallbackQuery, state: FSMContext):
-    parts = callback.data.split(":")
+@router.callback_query(F.data.startswith("rec_day:"))
+async def recurring_day_button(callback: CallbackQuery, state: FSMContext):
     try:
-        _, _, action, year_raw, month_raw, day_raw = parts
-        year = int(year_raw)
-        month = int(month_raw)
-        day = int(day_raw)
+        day = int(callback.data.split(":", maxsplit=1)[1])
     except (ValueError, IndexError):
-        await callback.answer("Не понял день", show_alert=True)
+        await callback.answer("Введите число от 1 до 31 или выберите день кнопкой.", show_alert=True)
         return
 
-    if action == "noop":
-        await callback.answer()
-        return
-
-    if action == "month":
-        if callback.message:
-            await callback.message.edit_reply_markup(reply_markup=calendar_kb("rec", year, month))
-        await callback.answer()
-        return
-
-    if action != "select" or day < 1 or day > 31:
-        await callback.answer("Выберите день месяца", show_alert=True)
+    if day < 1 or day > 31:
+        await callback.answer("Введите число от 1 до 31 или выберите день кнопкой.", show_alert=True)
         return
 
     await state.update_data(day_of_month=day)
@@ -896,6 +882,15 @@ async def recurring_calendar(callback: CallbackQuery, state: FSMContext):
     await callback.answer("День выбран")
 
 
+@router.callback_query(F.data == "cancel_recurring_day")
+async def recurring_day_cancel(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    if callback.message:
+        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.message.answer("Действие отменено.", reply_markup=main_menu_kb())
+    await callback.answer("Отменено")
+
+
 @router.message(RecurringStates.waiting_day)
 async def recurring_day(message: Message, state: FSMContext):
     try:
@@ -903,7 +898,7 @@ async def recurring_day(message: Message, state: FSMContext):
         if day < 1 or day > 31:
             raise ValueError
     except Exception:
-        await message.answer("Введите число от 1 до 31.")
+        await message.answer("Введите число от 1 до 31 или выберите день кнопкой.")
         return
     await state.update_data(day_of_month=day)
     await state.set_state(RecurringStates.waiting_category)
