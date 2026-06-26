@@ -57,6 +57,38 @@ class UpcomingRecurringPaymentsTest(unittest.TestCase):
         self.assertNotIn("paid_payment_dates", result[0])
 
 
+class DashboardUpcomingPaymentsTest(unittest.TestCase):
+    def test_dashboard_does_not_duplicate_today_recurring_in_upcoming_payments(self):
+        main_data = (
+            date(2026, 6, 17),
+            0,
+            0,
+            [],
+            [],
+            [],
+            [{"id": 1, "title": "Кубышка", "amount": 10000, "day_of_month": 17, "payment_date": date(2026, 6, 17)}],
+            [],
+        )
+        today_recurring = [
+            {
+                "id": 1,
+                "title": "Кубышка",
+                "amount": 10000,
+                "day_of_month": 17,
+                "log_id": None,
+            }
+        ]
+
+        with patch("services.reports._fetch_main_data", return_value=main_data), patch(
+            "services.reports.fetch_today_recurring_payments", return_value=today_recurring
+        ):
+            text = build_dashboard()
+
+        self.assertIn("• Кубышка — <b>10 000 ₽</b>", text)
+        self.assertIn("<b>📅 Платежи в ближайшие 10 дней:</b>\nНет платежей", text)
+        self.assertNotIn("17.06 — Кубышка — <b>10 000 ₽</b> 🔁", text)
+
+
 class OverduePaymentsReportTest(unittest.TestCase):
     def test_summary_report_shows_overdue_payments(self):
         main_data = (
