@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from handlers.payments import build_dashboard_reply_markup
+from handlers.payments import build_dashboard_reply_markup, build_recurring_operation_details
 
 
 class DashboardReplyMarkupTest(unittest.TestCase):
@@ -28,6 +28,33 @@ class DashboardReplyMarkupTest(unittest.TestCase):
         recurring.assert_called_once_with()
         self.assertEqual(len(keyboard.inline_keyboard), 1)
         self.assertEqual([button.text for button in keyboard.inline_keyboard[0]], ["+", "-"])
+
+
+class RecurringOperationDetailsTest(unittest.TestCase):
+    def test_recurring_operation_details_contains_all_editable_fields(self):
+        text = build_recurring_operation_details(
+            {
+                "id": 1,
+                "title": "Сбер",
+                "type": "payment",
+                "amount": 12345.67,
+                "category": "Кредит",
+                "day_of_month": 15,
+                "frequency": "monthly",
+                "comment": "Ипотека",
+            }
+        )
+
+        self.assertIn("Редактируем регулярный платёж «Сбер».", text)
+        self.assertIn("Текущие данные:", text)
+        self.assertIn("• Название: Сбер", text)
+        self.assertIn("• Тип: платёж", text)
+        self.assertIn("• Сумма: 12 345.67 ₽", text)
+        self.assertIn("• Категория: Кредит", text)
+        self.assertIn("• День месяца: 15 число", text)
+        self.assertIn("• Частота: ежемесячно", text)
+        self.assertIn("• Комментарий: Ипотека", text)
+        self.assertTrue(text.endswith("Что хотите изменить?"))
 
 
 if __name__ == "__main__":
