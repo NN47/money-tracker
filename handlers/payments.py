@@ -137,6 +137,40 @@ def calendar_events_kb(year: int, month: int):
 def recurring_kind_for_type(op_type: str | None) -> str:
     return "income" if op_type == "income" else "payment"
 
+def build_recurring_operation_details(operation) -> str:
+    type_labels = {
+        "income": "доход",
+        "expense": "расход",
+        "payment": "платёж",
+    }
+    frequency_labels = {
+        "monthly": "ежемесячно",
+    }
+    day = operation.get("day_of_month")
+    day_text = f"{day} число" if day else "не указан"
+    category = operation.get("category") or "без категории"
+    comment = operation.get("comment") or "без комментария"
+    op_type = operation.get("type")
+    type_text = type_labels.get(op_type, op_type or "не указан")
+    frequency = operation.get("frequency")
+    frequency_text = frequency_labels.get(frequency, frequency or "не указана")
+
+    return "\n".join(
+        [
+            f"Редактируем регулярный платёж «{operation['title']}».",
+            "",
+            "Текущие данные:",
+            f"• Название: {operation['title']}",
+            f"• Тип: {type_text}",
+            f"• Сумма: {money(float(operation['amount']))} ₽",
+            f"• Категория: {category}",
+            f"• День месяца: {day_text}",
+            f"• Частота: {frequency_text}",
+            f"• Комментарий: {comment}",
+            "",
+            "Что хотите изменить?",
+        ]
+    )
 
 def build_recurring_operations_section(operations, kind: str = "payment") -> str:
     if not operations:
@@ -528,7 +562,7 @@ async def recurring_edit_start(callback: CallbackQuery, state: FSMContext):
     await remove_inline_keyboard(callback)
     await send_callback_message(
         callback,
-        f"Редактируем регулярный платёж «{operation['title']}».\nЧто хотите изменить?",
+        build_recurring_operation_details(operation),
         reply_markup=recurring_edit_fields_kb(operation_id),
     )
 
