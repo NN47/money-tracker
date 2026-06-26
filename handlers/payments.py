@@ -46,7 +46,7 @@ from services.recurring_payments import (
     moscow_today,
     update_recurring_operation,
 )
-from services.reports import build_dashboard, fetch_categories, money_currency
+from services.reports import build_dashboard, fetch_categories, money, money_currency
 from handlers.home import dashboard_due_action_rows, fetch_unpaid_due_scheduled_payments
 
 router = Router()

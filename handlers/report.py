@@ -96,8 +96,11 @@ async def _send_report(message: Message, tx_type: str | None = None, state: FSMC
 
 @router.message(F.text == "📊 Отчёт")
 async def report(message: Message, state: FSMContext):
+    data = await state.get_data()
+    scope = data.get("report_scope")
+    tx_type = scope if scope in {"income", "expense"} else None
     await state.clear()
-    await _send_report(message, state=state)
+    await _send_report(message, tx_type=tx_type, state=state)
 
 
 @router.message(F.text == "📊 Отчёт по доходам")

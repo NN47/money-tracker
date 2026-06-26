@@ -181,9 +181,8 @@ def section_menu_kb(kind: str) -> ReplyKeyboardMarkup:
     else:
         rows = [
             [KeyboardButton(text="➖ Добавить расход")],
-            [KeyboardButton(text="📊 Отчёт по расходам")],
-            [KeyboardButton(text="📂 Категории")],
             [KeyboardButton(text="🔁 Регулярные платежи")],
+            [KeyboardButton(text="📊 Отчёт"), KeyboardButton(text="📂 Категории")],
             [KeyboardButton(text=BACK_TEXT)],
         ]
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
