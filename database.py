@@ -34,10 +34,20 @@ def init_db() -> None:
         try:
             cur.execute(
                 """
+                CREATE TABLE IF NOT EXISTS users (
+                    telegram_id BIGINT PRIMARY KEY,
+                    default_currency TEXT NOT NULL DEFAULT 'RUB',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            cur.execute(
+                """
                 CREATE TABLE IF NOT EXISTS transactions (
                     id SERIAL PRIMARY KEY,
                     type TEXT NOT NULL,
                     amount NUMERIC(12,2) NOT NULL,
+                    currency TEXT NOT NULL DEFAULT 'RUB',
                     category TEXT,
                     comment TEXT,
                     operation_date DATE NOT NULL DEFAULT CURRENT_DATE,
@@ -92,6 +102,19 @@ def init_db() -> None:
                 """
                 ALTER TABLE IF EXISTS transactions
                 ADD COLUMN IF NOT EXISTS operation_date DATE
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE IF EXISTS transactions
+                ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'RUB'
+                """
+            )
+            cur.execute(
+                """
+                UPDATE transactions
+                SET currency = 'RUB'
+                WHERE currency IS NULL OR TRIM(currency) = ''
                 """
             )
             cur.execute(

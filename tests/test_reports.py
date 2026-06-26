@@ -74,8 +74,8 @@ class OverduePaymentsReportTest(unittest.TestCase):
             text = build_summary_report(transactions=[])
 
         self.assertIn("<b>⚠️ Просроченные платежи:</b>", text)
-        self.assertIn("16.06.2026 — Кредит — <b>1 000 ₽</b> 🔁", text)
-        self.assertIn("15.06.2026 — Разовый — <b>500 ₽</b>", text)
+        self.assertIn("16.06.2026 — Кредит — <b>1 000 RUB</b> 🔁", text)
+        self.assertIn("15.06.2026 — Разовый — <b>500 RUB</b>", text)
 
     def test_dashboard_shows_overdue_payments(self):
         main_data = (
@@ -97,7 +97,7 @@ class OverduePaymentsReportTest(unittest.TestCase):
         self.assertIn("<b>⚠️ Просроченные платежи:</b>", text)
         self.assertIn("<b>📅 Платежи в ближайшие 10 дней:</b>", text)
         self.assertNotIn("📅 Ближайшие платежи:", text)
-        self.assertIn("16.06.2026 — Кредит — <b>1 000 ₽</b> 🔁", text)
+        self.assertIn("16.06.2026 — Кредит — <b>1 000 RUB</b> 🔁", text)
 
 
 if __name__ == "__main__":

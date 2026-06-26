@@ -20,11 +20,18 @@ from keyboards.main import (
     section_menu_kb,
     skip_comment_back_kb,
 )
+from services.currencies import extract_currency
 from services.dates import parse_transaction_date
+from services.users import get_user_default_currency
 from handlers.home import send_main_screen
 from services.reports import build_summary_report, fetch_categories, fetch_recent_transactions
 
 router = Router()
+
+AMOUNT_PROMPT = (
+    "Введите сумму. Если валюту не указать, операция будет записана в валюте по умолчанию. "
+    "Изменить валюту можно в ⚙️ Настройках."
+)
 
 
 class TransactionStates(StatesGroup):
@@ -40,6 +47,16 @@ def parse_money(raw: str) -> float:
     if amount <= 0:
         raise ValueError
     return round(amount, 2)
+
+
+def parse_amount_text(raw: str) -> tuple[float, str | None, str]:
+    currency, cleaned = extract_currency(raw)
+    parts = cleaned.split(maxsplit=1)
+    if not parts:
+        raise ValueError
+    amount = parse_money(parts[0])
+    tail = parts[1].strip() if len(parts) > 1 else ""
+    return amount, currency, tail
 
 
 def parse_date_ru(raw: str) -> date:
@@ -79,7 +96,7 @@ async def back_any(message: Message, state: FSMContext):
 
     if current_state == TransactionStates.waiting_category.state:
         await state.set_state(TransactionStates.waiting_amount)
-        await message.answer("Введите сумму операции:", reply_markup=back_kb())
+        await message.answer(AMOUNT_PROMPT, reply_markup=back_kb())
         return
 
     if current_state == TransactionStates.waiting_date_choice.state:
@@ -118,7 +135,7 @@ async def _start_transaction(message: Message, state: FSMContext, tx_type: str):
     await state.clear()
     await state.update_data(type=tx_type)
     await state.set_state(TransactionStates.waiting_amount)
-    await message.answer("Введите сумму операции:", reply_markup=back_kb())
+    await message.answer(AMOUNT_PROMPT, reply_markup=back_kb())
 
 
 @router.message(F.text == "💰 Доходы")
@@ -167,11 +184,18 @@ async def _ask_category(message: Message, state: FSMContext, prompt: str = "Вы
 @router.message(TransactionStates.waiting_amount)
 async def transaction_amount(message: Message, state: FSMContext):
     try:
-        amount = parse_money(message.text)
+        amount, extracted_currency, category = parse_amount_text(message.text or "")
     except Exception:
-        await message.answer("Введите корректную сумму больше 0. Например: 12 500,50")
+        await message.answer("Введите корректную сумму больше 0. Например: 12 500,50 или 500 грн продукты")
         return
-    await state.update_data(amount=amount)
+    default_currency = get_user_default_currency(message.from_user.id if message.from_user else None)
+    currency = extracted_currency or default_currency or "RUB"
+    await state.update_data(amount=amount, currency=currency)
+    if category:
+        await state.update_data(category=category)
+        await state.set_state(TransactionStates.waiting_date_choice)
+        await message.answer("Дата операции:", reply_markup=date_choice_back_kb())
+        return
     await state.set_state(TransactionStates.waiting_category)
     await _ask_category(message, state)
 
@@ -272,10 +296,10 @@ async def transaction_comment(message: Message, state: FSMContext):
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO transactions(type, amount, category, comment, operation_date)
-            VALUES(%s, %s, %s, %s, %s)
+            INSERT INTO transactions(type, amount, currency, category, comment, operation_date)
+            VALUES(%s, %s, %s, %s, %s, %s)
             """,
-            (data["type"], data["amount"], data["category"], comment, data["operation_date"]),
+            (data["type"], data["amount"], data.get("currency") or "RUB", data["category"], comment, data["operation_date"]),
         )
         cur.close()
     await message.answer("Сохранено ✅")
