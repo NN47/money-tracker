@@ -39,6 +39,34 @@ def money(value: float) -> str:
     return formatted.rstrip("0").rstrip(".")
 
 
+def money_currency(value: float, currency: str | None = None) -> str:
+    return f"{money(float(value))} {currency or 'RUB'}"
+
+
+def _totals_by_currency(rows) -> dict[str, float]:
+    return {row["currency"] or "RUB": float(row["total"] or 0) for row in rows}
+
+
+def _ensure_totals(totals) -> dict[str, float]:
+    if isinstance(totals, dict):
+        return totals
+    return {"RUB": float(totals or 0)}
+
+
+def _format_totals(totals: dict[str, float]) -> str:
+    totals = _ensure_totals(totals)
+    if not totals:
+        return money_currency(0, "RUB")
+    return ", ".join(money_currency(amount, currency) for currency, amount in sorted(totals.items()))
+
+
+def _subtract_totals(income: dict[str, float], expense: dict[str, float]) -> dict[str, float]:
+    income = _ensure_totals(income)
+    expense = _ensure_totals(expense)
+    currencies = set(income) | set(expense)
+    return {currency: income.get(currency, 0) - expense.get(currency, 0) for currency in currencies}
+
+
 def month_bounds(today: date):
     start = today.replace(day=1)
     if start.month == 12:
@@ -96,7 +124,7 @@ def _format_payment_line(row, *, include_year: bool = False) -> str:
     recurring_mark = " 🔁" if "day_of_month" in row else ""
     return (
         f"{row['payment_date'].strftime(date_format)} — {html.escape(row['title'])} — "
-        f"<b>{money(float(row['amount']))} ₽</b>{recurring_mark}"
+        f"<b>{money_currency(float(row['amount']), row.get('currency'))}</b>{recurring_mark}"
     )
 
 
@@ -106,10 +134,10 @@ def _fetch_main_data():
     horizon = today + timedelta(days=UPCOMING_PAYMENTS_DAYS)
     with get_connection() as conn:
         cur = dict_cursor(conn)
-        cur.execute("SELECT COALESCE(SUM(amount),0) total FROM transactions WHERE type='income' AND operation_date >= %s AND operation_date < %s", (start, nxt))
-        income = float(cur.fetchone()["total"])
-        cur.execute("SELECT COALESCE(SUM(amount),0) total FROM transactions WHERE type='expense' AND operation_date >= %s AND operation_date < %s", (start, nxt))
-        expense = float(cur.fetchone()["total"])
+        cur.execute("SELECT COALESCE(currency, 'RUB') currency, COALESCE(SUM(amount),0) total FROM transactions WHERE type='income' AND operation_date >= %s AND operation_date < %s GROUP BY COALESCE(currency, 'RUB')", (start, nxt))
+        income = _totals_by_currency(cur.fetchall())
+        cur.execute("SELECT COALESCE(currency, 'RUB') currency, COALESCE(SUM(amount),0) total FROM transactions WHERE type='expense' AND operation_date >= %s AND operation_date < %s GROUP BY COALESCE(currency, 'RUB')", (start, nxt))
+        expense = _totals_by_currency(cur.fetchall())
         cur.execute("SELECT id, title, amount, payment_date FROM scheduled_payments WHERE is_paid=FALSE AND payment_date < %s ORDER BY payment_date, id LIMIT 10", (today,))
         overdue_payments = cur.fetchall()
         cur.execute("SELECT id, title, amount, payment_date FROM scheduled_payments WHERE is_paid=FALSE AND payment_date BETWEEN %s AND %s ORDER BY payment_date LIMIT 10", (today, horizon))
@@ -151,21 +179,21 @@ def build_dashboard() -> str:
     today, income, expense, overdue_payments, overdue_recurring, payments, recurring, active_recurring = _fetch_main_data()
     today_recurring = fetch_today_recurring_payments()
     unpaid_today, paid_today = split_by_payment_status(today_recurring)
-    balance = income - expense
+    balance = _subtract_totals(income, expense)
     lines = [
         "💼 Главный экран",
         "",
         f"📊 <b>{format_russian_month_year(today)}</b>",
-        f"💰 <b>Доходы:</b> <b>{money(income)} ₽</b>",
-        f"💸 <b>Расходы:</b> <b>{money(expense)} ₽</b>",
-        f"⚖️ <b>Баланс:</b> <b>{money(balance)} ₽</b>",
+        f"💰 <b>Доходы:</b> <b>{_format_totals(income)}</b>",
+        f"💸 <b>Расходы:</b> <b>{_format_totals(expense)}</b>",
+        f"⚖️ <b>Баланс:</b> <b>{_format_totals(balance)}</b>",
     ]
     if unpaid_today:
         lines.extend(["", "<b>🔥 Сегодня к оплате:</b>"])
-        lines.extend([f"• {html.escape(r['title'])} — <b>{money(float(r['amount']))} ₽</b>" for r in unpaid_today])
+        lines.extend([f"• {html.escape(r['title'])} — <b>{money_currency(float(r['amount']), r.get('currency'))}</b>" for r in unpaid_today])
     if paid_today:
         lines.extend(["", "<b>✅ Сегодня оплачено:</b>"])
-        lines.extend([f"• {html.escape(r['title'])} — <b>{money(float(r['amount']))} ₽</b>" for r in paid_today])
+        lines.extend([f"• {html.escape(r['title'])} — <b>{money_currency(float(r['amount']), r.get('currency'))}</b>" for r in paid_today])
     overdue = sorted([*overdue_payments, *overdue_recurring], key=lambda row: (row["payment_date"], row["id"]))[:10]
     if overdue:
         lines.extend(["", "<b>⚠️ Просроченные платежи:</b>"])
@@ -180,7 +208,7 @@ def build_dashboard() -> str:
     lines.append("")
     lines.append("<b>🔁 Постоянные операции:</b>")
     if active_recurring:
-        lines.extend([f"{r['day_of_month']} число — {html.escape(r['title'])} — <b>{money(float(r['amount']))} ₽</b>" for r in active_recurring])
+        lines.extend([f"{r['day_of_month']} число — {html.escape(r['title'])} — <b>{money_currency(float(r['amount']), r.get('currency'))}</b>" for r in active_recurring])
     else:
         lines.append("Нет активных постоянных операций")
     return "\n".join(lines)
@@ -203,7 +231,7 @@ def fetch_recent_transactions(limit: int = 10, tx_type: str | None = None):
         params.append(limit)
         cur.execute(
             f"""
-            SELECT id, type, amount, category, comment, operation_date
+            SELECT id, type, amount, COALESCE(currency, 'RUB') currency, category, comment, operation_date
             FROM transactions
             {type_filter}
             ORDER BY operation_date DESC, id DESC
@@ -221,28 +249,28 @@ def _format_transaction_line(row, start: date, end: date) -> str:
     tx_date = _format_transaction_date(row["operation_date"], start, end)
     category = html.escape(row["category"] or "Без категории")
     comment = f" — {html.escape(row['comment'])}" if row.get("comment") else ""
-    return f"<b>{tx_date}</b> <b>{sign}{money(float(row['amount']))} ₽</b> — <b>{category}</b>{comment}"
+    return f"<b>{tx_date}</b> <b>{sign}{money_currency(float(row['amount']), row.get('currency'))}</b> — <b>{category}</b>{comment}"
 
 
 def build_summary_report(transactions=None, tx_type: str | None = None) -> str:
     today, income, expense, overdue_payments, overdue_recurring, payments, recurring, _ = _fetch_main_data()
-    balance = income - expense
+    balance = _subtract_totals(income, expense)
     tx = fetch_recent_transactions(tx_type=tx_type) if transactions is None else transactions
     start, nxt = month_bounds(today)
     if tx_type == "income":
         title = "📊 <b>Отчёт по доходам</b>"
-        total_lines = [f"💰 <b>Доходы:</b> <b>{money(income)} ₽</b>"]
+        total_lines = [f"💰 <b>Доходы:</b> <b>{_format_totals(income)}</b>"]
         recent_title = "<b>💵 Последние 10 доходов:</b>"
     elif tx_type == "expense":
         title = "📊 <b>Отчёт по расходам</b>"
-        total_lines = [f"💸 <b>Расходы:</b> <b>{money(expense)} ₽</b>"]
+        total_lines = [f"💸 <b>Расходы:</b> <b>{_format_totals(expense)}</b>"]
         recent_title = "<b>🧾 Последние 10 расходов:</b>"
     else:
         title = "📊 <b>Отчёт</b>"
         total_lines = [
-            f"💰 <b>Доходы:</b> <b>{money(income)} ₽</b>",
-            f"💸 <b>Расходы:</b> <b>{money(expense)} ₽</b>",
-            f"⚖️ <b>Баланс:</b> <b>{money(balance)} ₽</b>",
+            f"💰 <b>Доходы:</b> <b>{_format_totals(income)}</b>",
+            f"💸 <b>Расходы:</b> <b>{_format_totals(expense)}</b>",
+            f"⚖️ <b>Баланс:</b> <b>{_format_totals(balance)}</b>",
         ]
         recent_title = "<b>🧾 Последние 10 операций:</b>"
     lines = [title, "", f"🗓 <b>Период:</b> <b>{format_russian_month_year(today)}</b>", *total_lines, "", recent_title]
@@ -280,11 +308,11 @@ def fetch_categories(tx_type: str | None = None):
             params.append(tx_type)
         cur.execute(
             f"""
-            SELECT category, COUNT(*) operations_count, COALESCE(SUM(amount), 0) total
+            SELECT category, COALESCE(currency, 'RUB') currency, COUNT(*) operations_count, COALESCE(SUM(amount), 0) total
             FROM transactions
             WHERE COALESCE(NULLIF(TRIM(category), ''), '') <> ''
             {type_filter}
-            GROUP BY category
+            GROUP BY category, COALESCE(currency, 'RUB')
             ORDER BY LOWER(category)
             """,
             params,
@@ -305,7 +333,7 @@ def fetch_category_transactions(category: str, limit: int = 50, tx_type: str | N
         params.append(limit)
         cur.execute(
             f"""
-            SELECT id, type, amount, category, comment, operation_date
+            SELECT id, type, amount, COALESCE(currency, 'RUB') currency, category, comment, operation_date
             FROM transactions
             WHERE category = %s
             {type_filter}
@@ -333,7 +361,7 @@ def build_categories_report(categories, tx_type: str | None = None) -> str:
     for row in categories:
         lines.append(
             f"• {html.escape(row['category'])} — {int(row['operations_count'])} опер., "
-            f"<b>{money(float(row['total']))} ₽</b>"
+            f"<b>{money_currency(float(row['total']), row.get('currency'))}</b>"
         )
     lines.append("")
     lines.append("Откройте категорию кнопкой ниже, чтобы увидеть операции.")
@@ -349,15 +377,19 @@ def build_category_report(category: str, transactions, tx_type: str | None = Non
         title = f"📂 <b>Расходы в категории: {html.escape(category)}</b>"
     else:
         title = f"📂 <b>Категория: {html.escape(category)}</b>"
-    income = sum(float(row['amount']) for row in transactions if row['type'] == 'income')
-    expense = sum(float(row['amount']) for row in transactions if row['type'] == 'expense')
+    income = {}
+    expense = {}
+    for row in transactions:
+        target = income if row['type'] == 'income' else expense
+        currency = row.get('currency') or 'RUB'
+        target[currency] = target.get(currency, 0) + float(row['amount'])
     lines = [title, ""]
     if tx_type != "expense":
-        lines.append(f"<b>Доходы:</b> {money(income)} ₽")
+        lines.append(f"<b>Доходы:</b> {_format_totals(income)}")
     if tx_type != "income":
-        lines.append(f"<b>Расходы:</b> {money(expense)} ₽")
+        lines.append(f"<b>Расходы:</b> {_format_totals(expense)}")
     if tx_type is None:
-        lines.append(f"<b>Баланс:</b> {money(income - expense)} ₽")
+        lines.append(f"<b>Баланс:</b> {_format_totals(_subtract_totals(income, expense))}")
     lines.extend(["", "<b>Операции:</b>"])
     if transactions:
         for row in transactions:

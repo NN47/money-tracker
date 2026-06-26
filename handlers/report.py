@@ -19,6 +19,7 @@ from keyboards.main import (
 )
 from services.dates import parse_transaction_date
 from handlers.home import send_main_screen
+from services.currencies import extract_currency
 from services.reports import (
     build_categories_report,
     build_category_report,
@@ -28,6 +29,7 @@ from services.reports import (
     fetch_category_transactions,
     fetch_recent_transactions,
     money,
+    money_currency,
 )
 
 router = Router()
@@ -64,7 +66,7 @@ def _format_transaction_details(transaction) -> str:
     comment = transaction.get("comment") or "без комментария"
     return (
         f"<b>{html.escape(_type_label(transaction['type']).capitalize())}</b>\n"
-        f"<b>Сумма:</b> <b>{sign}{money(float(transaction['amount']))} ₽</b>\n"
+        f"<b>Сумма:</b> <b>{sign}{money_currency(float(transaction['amount']), transaction.get('currency'))}</b>\n"
         f"<b>Категория:</b> <b>{html.escape(transaction['category'] or 'Без категории')}</b>\n"
         f"<b>Дата:</b> <b>{transaction['operation_date'].strftime('%d.%m.%Y')}</b>\n"
         f"<b>Комментарий:</b> {html.escape(comment)}"
@@ -72,7 +74,8 @@ def _format_transaction_details(transaction) -> str:
 
 
 def _parse_money(raw: str) -> float:
-    amount = float(raw.replace(" ", "").replace(",", "."))
+    currency, cleaned = extract_currency(raw)
+    amount = float(cleaned.split(maxsplit=1)[0].replace(" ", "").replace(",", "."))
     if amount <= 0:
         raise ValueError
     return round(amount, 2)
@@ -301,7 +304,7 @@ async def delete_transaction_ask(callback: CallbackQuery):
     if callback.message:
         await callback.message.answer(
             f"Удалить операцию «{html.escape(transaction['category'] or 'Без категории')} — "
-            f"{money(float(transaction['amount']))} ₽»?",
+            f"{money_currency(float(transaction['amount']), transaction.get('currency'))}»?",
             reply_markup=report_delete_confirm_kb(transaction_id),
         )
 
@@ -410,7 +413,7 @@ def _fetch_transaction(transaction_id: int):
     with get_connection() as conn:
         cur = dict_cursor(conn)
         cur.execute(
-            "SELECT id, type, amount, category, comment, operation_date FROM transactions WHERE id = %s",
+            "SELECT id, type, amount, COALESCE(currency, 'RUB') currency, category, comment, operation_date FROM transactions WHERE id = %s",
             (transaction_id,),
         )
         transaction = cur.fetchone()

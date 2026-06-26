@@ -10,7 +10,7 @@ from aiogram.types import Update
 from dotenv import load_dotenv
 
 from database import init_db
-from handlers import payments, report, start, transactions
+from handlers import payments, report, settings, start, transactions
 from services.recurring_payments import MOSCOW_TZ, fetch_unpaid_due_recurring_payments
 
 
@@ -98,6 +98,7 @@ async def main() -> None:
     dp.include_router(transactions.router)
     dp.include_router(payments.router)
     dp.include_router(report.router)
+    dp.include_router(settings.router)
 
     app = web.Application()
     app["bot"] = bot

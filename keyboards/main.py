@@ -24,6 +24,8 @@ MAIN_MENU_TEXTS = {
     "📊 Отчёт по доходам",
     "📊 Отчёт по расходам",
     "📂 Категории",
+    "⚙️ Настройки",
+    "💱 Валюта по умолчанию",
 }
 
 
@@ -136,6 +138,7 @@ def main_menu_kb() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="💰 Доходы"), KeyboardButton(text="💸 Расходы")],
             [KeyboardButton(text="📅 Календарь")],
             [KeyboardButton(text="📊 Отчёт")],
+            [KeyboardButton(text="⚙️ Настройки")],
         ],
         resize_keyboard=True,
     )
@@ -364,7 +367,7 @@ def report_transactions_kb(transactions, scope: str = "all", include_edit_button
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"{date_text} {sign}{amount} ₽ — {category}",
+                    text=f"{date_text} {sign}{amount} {row.get('currency') or 'RUB'} — {category}",
                     callback_data=f"report_tx:{row['id']}",
                 )
             ]
@@ -430,3 +433,16 @@ def report_categories_kb(categories, scope: str = "all") -> InlineKeyboardMarkup
     if not rows:
         return None
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def settings_menu_kb() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="💱 Валюта по умолчанию")], [KeyboardButton(text=BACK_TEXT)]],
+        resize_keyboard=True,
+    )
+
+
+def currency_choice_kb(currencies: tuple[str, ...]) -> ReplyKeyboardMarkup:
+    rows = [[KeyboardButton(text=currency)] for currency in currencies]
+    rows.append([KeyboardButton(text=BACK_TEXT)])
+    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)

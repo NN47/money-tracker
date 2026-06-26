@@ -4,7 +4,7 @@ from calendar import monthrange
 from datetime import date
 
 from database import dict_cursor, get_connection
-from services.reports import money
+from services.reports import money, money_currency
 
 OPERATION_TYPE_LABELS = {
     "income": "доход",
@@ -105,7 +105,7 @@ def fetch_calendar_day_events(day: date) -> dict[str, list]:
 
         cur.execute(
             """
-            SELECT id, type, amount, category, comment
+            SELECT id, type, amount, COALESCE(currency, 'RUB') currency, category, comment
             FROM transactions
             WHERE operation_date = %s
             ORDER BY id DESC
@@ -162,7 +162,7 @@ def build_calendar_day_events(day: date, events: dict[str, list]) -> str:
         for row in transactions:
             sign = "+" if row["type"] == "income" else "-"
             category = row["category"] or "без категории"
-            line = f"• {sign}{money(float(row['amount']))} ₽ — {category}"
+            line = f"• {sign}{money_currency(float(row['amount']), row.get('currency'))} — {category}"
             lines.append(_append_comment(line, row.get("comment")))
 
     return "\n".join(lines)
