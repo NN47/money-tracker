@@ -5,6 +5,7 @@ from keyboards.main import (
     BACK_TEXT,
     CANCEL_TEXT,
     HOME_TEXT,
+    main_menu_kb,
     back_kb,
     calendar_back_kb,
     calendar_kb,
@@ -14,6 +15,21 @@ from keyboards.main import (
     report_transactions_kb,
     skip_comment_back_kb,
 )
+
+
+class MainMenuKeyboardTest(unittest.TestCase):
+    def test_main_menu_keyboard_uses_requested_two_button_rows(self):
+        keyboard = main_menu_kb()
+        button_rows = [[button.text for button in row] for row in keyboard.keyboard]
+
+        self.assertEqual(
+            button_rows,
+            [
+                ["💰 Доходы", "💸 Расходы"],
+                ["📅 Календарь", "📊 Отчёт"],
+                ["💼 Главный экран", "⚙️ Настройки"],
+            ],
+        )
 
 
 class CalendarKeyboardTest(unittest.TestCase):

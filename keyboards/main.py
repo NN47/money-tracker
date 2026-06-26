@@ -134,11 +134,9 @@ def calendar_kb(
 def main_menu_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="💼 Главный экран")],
             [KeyboardButton(text="💰 Доходы"), KeyboardButton(text="💸 Расходы")],
-            [KeyboardButton(text="📅 Календарь")],
-            [KeyboardButton(text="📊 Отчёт")],
-            [KeyboardButton(text="⚙️ Настройки")],
+            [KeyboardButton(text="📅 Календарь"), KeyboardButton(text="📊 Отчёт")],
+            [KeyboardButton(text="💼 Главный экран"), KeyboardButton(text="⚙️ Настройки")],
         ],
         resize_keyboard=True,
     )
