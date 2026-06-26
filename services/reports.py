@@ -3,11 +3,10 @@ from datetime import date, timedelta
 import html
 
 from database import dict_cursor, get_connection
+from services.currencies import format_amount, format_money
 from services.recurring_payments import (
-    fetch_today_recurring_payments,
     fetch_unpaid_due_recurring_payments,
     moscow_today,
-    split_by_payment_status,
 )
 
 UPCOMING_PAYMENTS_DAYS = 10
@@ -33,14 +32,11 @@ def format_russian_month_year(value: date) -> str:
 
 
 def money(value: float) -> str:
-    formatted = f"{value:,.2f}".replace(",", " ")
-    if formatted.endswith(".00"):
-        return formatted[:-3]
-    return formatted.rstrip("0").rstrip(".")
+    return format_amount(value)
 
 
 def money_currency(value: float, currency: str | None = None) -> str:
-    return f"{money(float(value))} {currency or 'RUB'}"
+    return format_money(value, currency)
 
 
 def _totals_by_currency(rows) -> dict[str, float]:
@@ -167,18 +163,14 @@ def _fetch_main_data():
             (today, horizon),
         )
         payable_recurring = cur.fetchall()
-        cur.execute("SELECT id, title, amount, day_of_month FROM recurring_operations WHERE is_active=TRUE ORDER BY day_of_month NULLS LAST, id LIMIT 10")
-        active_recurring = cur.fetchall()
         cur.close()
     overdue_recurring = _overdue_recurring_payments(today)
     recurring_upcoming = upcoming_recurring_payments(payable_recurring, today, horizon)[:10]
-    return today, income, expense, overdue_payments, overdue_recurring, payments, recurring_upcoming, active_recurring
+    return today, income, expense, overdue_payments, overdue_recurring, payments, recurring_upcoming
 
 
 def build_dashboard() -> str:
-    today, income, expense, overdue_payments, overdue_recurring, payments, recurring, active_recurring = _fetch_main_data()
-    today_recurring = fetch_today_recurring_payments()
-    unpaid_today, paid_today = split_by_payment_status(today_recurring)
+    today, income, expense, _overdue_payments, _overdue_recurring, payments, recurring = _fetch_main_data()
     balance = _subtract_totals(income, expense)
     lines = [
         "💼 Главный экран",
@@ -188,29 +180,13 @@ def build_dashboard() -> str:
         f"💸 <b>Расходы:</b> <b>{_format_totals(expense)}</b>",
         f"⚖️ <b>Баланс:</b> <b>{_format_totals(balance)}</b>",
     ]
-    if unpaid_today:
-        lines.extend(["", "<b>🔥 Сегодня к оплате:</b>"])
-        lines.extend([f"• {html.escape(r['title'])} — <b>{money_currency(float(r['amount']), r.get('currency'))}</b>" for r in unpaid_today])
-    if paid_today:
-        lines.extend(["", "<b>✅ Сегодня оплачено:</b>"])
-        lines.extend([f"• {html.escape(r['title'])} — <b>{money_currency(float(r['amount']), r.get('currency'))}</b>" for r in paid_today])
-    overdue = sorted([*overdue_payments, *overdue_recurring], key=lambda row: (row["payment_date"], row["id"]))[:10]
-    if overdue:
-        lines.extend(["", "<b>⚠️ Просроченные платежи:</b>"])
-        lines.extend([_format_payment_line(r, include_year=True) for r in overdue])
-    lines.extend(["", "<b>📅 Платежи в ближайшие 10 дней:</b>"])
     upcoming_payments = sorted([*payments, *recurring], key=lambda row: (row["payment_date"], row["id"]))[:10]
     if upcoming_payments:
+        lines.extend(["", "<b>📅 Платежи в ближайшие 10 дней:</b>"])
         for r in upcoming_payments:
             lines.append(_format_payment_line(r))
     else:
-        lines.append("Нет платежей")
-    lines.append("")
-    lines.append("<b>🔁 Постоянные операции:</b>")
-    if active_recurring:
-        lines.extend([f"{r['day_of_month']} число — {html.escape(r['title'])} — <b>{money_currency(float(r['amount']), r.get('currency'))}</b>" for r in active_recurring])
-    else:
-        lines.append("Нет активных постоянных операций")
+        lines.extend(["", "<b>📅 Платежей в ближайшие 10 дней нет</b>"])
     return "\n".join(lines)
 
 
@@ -253,7 +229,7 @@ def _format_transaction_line(row, start: date, end: date) -> str:
 
 
 def build_summary_report(transactions=None, tx_type: str | None = None) -> str:
-    today, income, expense, overdue_payments, overdue_recurring, payments, recurring, _ = _fetch_main_data()
+    today, income, expense, overdue_payments, overdue_recurring, payments, recurring = _fetch_main_data()
     balance = _subtract_totals(income, expense)
     tx = fetch_recent_transactions(tx_type=tx_type) if transactions is None else transactions
     start, nxt = month_bounds(today)

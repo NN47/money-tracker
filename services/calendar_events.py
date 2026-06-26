@@ -4,7 +4,7 @@ from calendar import monthrange
 from datetime import date
 
 from database import dict_cursor, get_connection
-from services.reports import money, money_currency
+from services.reports import money_currency
 
 OPERATION_TYPE_LABELS = {
     "income": "доход",
@@ -144,7 +144,7 @@ def build_calendar_day_events(day: date, events: dict[str, list]) -> str:
         lines.extend(["", "🗓 Предстоящие платежи:"])
         for row in scheduled:
             status = "оплачен" if row["is_paid"] else "не оплачен"
-            line = f"• {row['title']} — {money(float(row['amount']))} ₽ ({status})"
+            line = f"• {row['title']} — {money_currency(float(row['amount']))} ({status})"
             lines.append(_append_comment(line, row.get("comment")))
 
     recurring = events["recurring"]
@@ -153,7 +153,7 @@ def build_calendar_day_events(day: date, events: dict[str, list]) -> str:
         for row in recurring:
             type_text = OPERATION_TYPE_LABELS.get(row["type"], row["type"])
             category = row["category"] or "без категории"
-            line = f"• {row['title']} — {money(float(row['amount']))} ₽ ({type_text}, {category})"
+            line = f"• {row['title']} — {money_currency(float(row['amount']))} ({type_text}, {category})"
             lines.append(_append_comment(line, row.get("comment")))
 
     transactions = events["transactions"]
