@@ -14,6 +14,7 @@ from keyboards.main import (
     recurring_edit_fields_kb,
     recurring_payments_actions_kb,
     report_transactions_kb,
+    section_menu_kb,
     skip_comment_back_kb,
 )
 
@@ -87,6 +88,18 @@ class BackKeyboardTest(unittest.TestCase):
         self.assertIn("Пропустить", button_texts)
         self.assertIn(BACK_TEXT, button_texts)
         self.assertNotIn(CANCEL_TEXT, button_texts)
+
+
+class SectionMenuKeyboardTest(unittest.TestCase):
+    def test_expense_section_menu_uses_requested_rows(self):
+        keyboard = section_menu_kb("expense")
+
+        self.assertEqual([[button.text for button in row] for row in keyboard.keyboard], [
+            ["➖ Добавить расход"],
+            ["🔁 Регулярные платежи"],
+            ["📊 Отчёт", "📂 Категории"],
+            [BACK_TEXT],
+        ])
 
 
 class ReportKeyboardTest(unittest.TestCase):
