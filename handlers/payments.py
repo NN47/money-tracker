@@ -45,7 +45,7 @@ from services.recurring_payments import (
     moscow_today,
     update_recurring_operation,
 )
-from services.reports import build_dashboard, fetch_categories, money
+from services.reports import build_dashboard, fetch_categories, money_currency
 from handlers.home import dashboard_due_action_rows, fetch_unpaid_due_scheduled_payments
 
 router = Router()
@@ -190,7 +190,7 @@ def build_recurring_operations_section(operations, kind: str = "payment") -> str
         type_text = type_labels.get(operation["type"], operation["type"])
         category = operation["category"] or "без категории"
         lines.append(
-            f"• {day_text} — {operation['title']} — {money(float(operation['amount']))} ₽ "
+            f"• {day_text} — {operation['title']} — {money_currency(float(operation['amount']))} "
             f"({type_text}, {category})"
         )
     return "\n".join(lines)
@@ -217,7 +217,7 @@ def build_recurring_payment_notification(operations) -> str:
     for row in operations:
         payment_date = row.get("payment_date")
         date_label = f" за {payment_date.strftime('%d.%m.%Y')}" if payment_date and payment_date < today else ""
-        lines.append(f"• {row['title']}{date_label} — {money(float(row['amount']))} ₽")
+        lines.append(f"• {row['title']}{date_label} — {money_currency(float(row['amount']))}")
     return "\n".join(lines)
 
 
@@ -979,5 +979,5 @@ async def list_payments(message: Message):
         await message.answer("Нет платежей.")
         return
     for row in rows:
-        txt = f"{row['payment_date'].strftime('%d.%m')} — {row['title']} — {money(float(row['amount']))} ₽"
+        txt = f"{row['payment_date'].strftime('%d.%m')} — {row['title']} — {money_currency(float(row['amount']))}"
         await message.answer(txt, reply_markup=payment_done_kb(row['id']))

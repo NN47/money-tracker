@@ -44,7 +44,37 @@ def extract_currency(text: str) -> tuple[str | None, str]:
     return code, cleaned
 
 
-def format_money_with_currency(value: float, currency: str | None) -> str:
-    from services.reports import money
+CURRENCY_SYMBOLS = {
+    "RUB": "₽",
+    "UAH": "₴",
+    "KZT": "₸",
+    "USD": "$",
+    "EUR": "€",
+    "TRY": "₺",
+    "GEL": "₾",
+    "AMD": "֏",
+    "AZN": "₼",
+    "BYN": "Br",
+    "KGS": "с",
+    "UZS": "сум",
+    "TJS": "сомони",
+    "MDL": "L",
+    "TMT": "m",
+}
 
-    return f"{money(float(value))} {currency or DEFAULT_CURRENCY}"
+
+def format_amount(value: int | float) -> str:
+    formatted = f"{float(value):,.2f}".replace(",", " ")
+    if formatted.endswith(".00"):
+        return formatted[:-3]
+    return formatted.rstrip("0").rstrip(".")
+
+
+def format_money(amount: int | float, currency: str | None = DEFAULT_CURRENCY) -> str:
+    code = (currency or DEFAULT_CURRENCY).upper()
+    symbol = CURRENCY_SYMBOLS.get(code, code)
+    return f"{format_amount(amount)} {symbol}"
+
+
+def format_money_with_currency(value: float, currency: str | None) -> str:
+    return format_money(value, currency)

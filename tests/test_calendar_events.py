@@ -39,7 +39,7 @@ class CalendarEventsTest(unittest.TestCase):
         self.assertIn("📅 События на 12.06.2026", text)
         self.assertIn("Ипотека — 1 000 ₽ (не оплачен) — банк", text)
         self.assertIn("Подписка — 299 ₽ (платёж, Сервисы)", text)
-        self.assertIn("+5 000 RUB — ЗП", text)
+        self.assertIn("+5 000 ₽ — ЗП", text)
 
 
 if __name__ == "__main__":

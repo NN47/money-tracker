@@ -67,17 +67,16 @@ class OverduePaymentsReportTest(unittest.TestCase):
             [{"id": 1, "title": "Кредит", "amount": 1000, "day_of_month": 16, "payment_date": date(2026, 6, 16)}],
             [],
             [],
-            [],
         )
 
         with patch("services.reports._fetch_main_data", return_value=main_data):
             text = build_summary_report(transactions=[])
 
         self.assertIn("<b>⚠️ Просроченные платежи:</b>", text)
-        self.assertIn("16.06.2026 — Кредит — <b>1 000 RUB</b> 🔁", text)
-        self.assertIn("15.06.2026 — Разовый — <b>500 RUB</b>", text)
+        self.assertIn("16.06.2026 — Кредит — <b>1 000 ₽</b> 🔁", text)
+        self.assertIn("15.06.2026 — Разовый — <b>500 ₽</b>", text)
 
-    def test_dashboard_shows_overdue_payments(self):
+    def test_dashboard_hides_overdue_and_recurring_operations_sections(self):
         main_data = (
             date(2026, 6, 17),
             0,
@@ -86,18 +85,34 @@ class OverduePaymentsReportTest(unittest.TestCase):
             [{"id": 1, "title": "Кредит", "amount": 1000, "day_of_month": 16, "payment_date": date(2026, 6, 16)}],
             [],
             [],
-            [],
         )
 
-        with patch("services.reports._fetch_main_data", return_value=main_data), patch(
-            "services.reports.fetch_today_recurring_payments", return_value=[]
-        ):
+        with patch("services.reports._fetch_main_data", return_value=main_data):
             text = build_dashboard()
 
-        self.assertIn("<b>⚠️ Просроченные платежи:</b>", text)
-        self.assertIn("<b>📅 Платежи в ближайшие 10 дней:</b>", text)
-        self.assertNotIn("📅 Ближайшие платежи:", text)
-        self.assertIn("16.06.2026 — Кредит — <b>1 000 RUB</b> 🔁", text)
+        self.assertNotIn("<b>⚠️ Просроченные платежи:</b>", text)
+        self.assertNotIn("<b>🔁 Постоянные операции:</b>", text)
+        self.assertIn("<b>📅 Платежей в ближайшие 10 дней нет</b>", text)
+
+    def test_dashboard_shows_upcoming_payments_with_currency_symbol(self):
+        main_data = (
+            date(2026, 6, 17),
+            {"RUB": 78972},
+            {"RUB": 69356},
+            [],
+            [],
+            [{"id": 2, "title": "Разовый", "amount": 500, "payment_date": date(2026, 6, 20)}],
+            [{"id": 1, "title": "Кредит", "amount": 1000, "day_of_month": 18, "payment_date": date(2026, 6, 18)}],
+        )
+
+        with patch("services.reports._fetch_main_data", return_value=main_data):
+            text = build_dashboard()
+
+        self.assertIn("💰 <b>Доходы:</b> <b>78 972 ₽</b>", text)
+        self.assertIn("💸 <b>Расходы:</b> <b>69 356 ₽</b>", text)
+        self.assertIn("⚖️ <b>Баланс:</b> <b>9 616 ₽</b>", text)
+        self.assertIn("18.06 — Кредит — <b>1 000 ₽</b> 🔁", text)
+        self.assertIn("20.06 — Разовый — <b>500 ₽</b>", text)
 
 
 if __name__ == "__main__":
