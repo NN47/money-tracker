@@ -32,6 +32,14 @@ AMOUNT_PROMPT = (
     "Введите сумму. Если валюту не указать, операция будет записана в валюте по умолчанию. "
     "Изменить валюту можно в ⚙️ Настройках."
 )
+EXPENSE_AMOUNT_PROMPT = (
+    "➕ Новый расход\n\n"
+    "Шаг 1 из 3\n"
+    "💰 Введите сумму\n\n"
+    "Например: 8500, 8500 ₽ или 100 USD\n\n"
+    "Если валюта не указана — используется валюта по умолчанию."
+)
+AMOUNT_PLACEHOLDER = "Например: 8500 ₽"
 
 
 class TransactionStates(StatesGroup):
@@ -84,8 +92,8 @@ async def cancel_any(message: Message, state: FSMContext):
 )
 async def back_any(message: Message, state: FSMContext):
     current_state = await state.get_state()
+    data = await state.get_data()
     if current_state == TransactionStates.waiting_amount.state:
-        data = await state.get_data()
         if data.get("type") == "expense":
             await expense_section(message, state)
         elif data.get("type") == "income":
@@ -96,7 +104,8 @@ async def back_any(message: Message, state: FSMContext):
 
     if current_state == TransactionStates.waiting_category.state:
         await state.set_state(TransactionStates.waiting_amount)
-        await message.answer(AMOUNT_PROMPT, reply_markup=back_kb())
+        tx_type = data.get("type")
+        await message.answer(_amount_prompt(tx_type), reply_markup=_amount_reply_markup(tx_type))
         return
 
     if current_state == TransactionStates.waiting_date_choice.state:
@@ -131,11 +140,23 @@ async def menu_during_transaction(message: Message, state: FSMContext):
     await state.clear()
 
 
+def _amount_prompt(tx_type: str) -> str:
+    if tx_type == "expense":
+        return EXPENSE_AMOUNT_PROMPT
+    return AMOUNT_PROMPT
+
+
+def _amount_reply_markup(tx_type: str):
+    if tx_type == "expense":
+        return back_kb(input_field_placeholder=AMOUNT_PLACEHOLDER)
+    return back_kb()
+
+
 async def _start_transaction(message: Message, state: FSMContext, tx_type: str):
     await state.clear()
     await state.update_data(type=tx_type)
     await state.set_state(TransactionStates.waiting_amount)
-    await message.answer(AMOUNT_PROMPT, reply_markup=back_kb())
+    await message.answer(_amount_prompt(tx_type), reply_markup=_amount_reply_markup(tx_type))
 
 
 @router.message(F.text == "💰 Доходы")
