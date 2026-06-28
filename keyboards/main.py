@@ -275,10 +275,15 @@ def with_cancel_kb(*rows: list[KeyboardButton]) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=keyboard_rows, resize_keyboard=True, one_time_keyboard=True)
 
 
-def with_back_kb(*rows: list[KeyboardButton]) -> ReplyKeyboardMarkup:
+def with_back_kb(*rows: list[KeyboardButton], input_field_placeholder: str | None = None) -> ReplyKeyboardMarkup:
     keyboard_rows = [list(row) for row in rows]
     keyboard_rows.append([KeyboardButton(text=BACK_TEXT)])
-    return ReplyKeyboardMarkup(keyboard=keyboard_rows, resize_keyboard=True, one_time_keyboard=True)
+    return ReplyKeyboardMarkup(
+        keyboard=keyboard_rows,
+        resize_keyboard=True,
+        one_time_keyboard=True,
+        input_field_placeholder=input_field_placeholder,
+    )
 
 
 def skip_comment_kb() -> ReplyKeyboardMarkup:
@@ -349,8 +354,8 @@ def cancel_kb() -> ReplyKeyboardMarkup:
     return with_cancel_kb()
 
 
-def back_kb() -> ReplyKeyboardMarkup:
-    return with_back_kb()
+def back_kb(input_field_placeholder: str | None = None) -> ReplyKeyboardMarkup:
+    return with_back_kb(input_field_placeholder=input_field_placeholder)
 
 
 def report_menu_kb() -> ReplyKeyboardMarkup:
