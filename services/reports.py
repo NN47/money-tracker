@@ -125,14 +125,19 @@ def _format_payment_line(row, *, include_year: bool = False) -> str:
 
 
 def _person_filter_sql(person_id: int | None, prefix: str = "") -> tuple[str, list]:
-    if person_id is None:
-        return "", []
     column = f"{prefix}person_id" if prefix else "person_id"
-    return f" AND {column} = %s", [person_id]
+    if person_id is not None:
+        return f" AND {column} = %s", [person_id]
+    table_prefix = prefix.rstrip(".")
+    person_alias = "p" if not table_prefix else f"{table_prefix}_person"
+    return (
+        f" AND ({column} IS NULL OR EXISTS (SELECT 1 FROM persons {person_alias} WHERE {person_alias}.id = {column} AND {person_alias}.include_in_budget = TRUE))",
+        [],
+    )
 
 
 def _person_title(person_name: str | None) -> list[str]:
-    return [f"👤 <b>{html.escape(person_name)}</b>", "", f"Фильтр: 👤 {html.escape(person_name)}", ""] if person_name else []
+    return [f"📁 <b>{html.escape(person_name)}</b>", "", f"Фильтр: 📁 {html.escape(person_name)}", ""] if person_name else []
 
 
 def _fetch_main_data(person_id: int | None = None):
@@ -221,6 +226,8 @@ def fetch_recent_transactions(limit: int = 10, tx_type: str | None = None, perso
         if person_id is not None:
             where.append("person_id = %s")
             params.append(person_id)
+        else:
+            where.append("(person_id IS NULL OR EXISTS (SELECT 1 FROM persons p WHERE p.id = transactions.person_id AND p.include_in_budget = TRUE))")
         type_filter = "WHERE " + " AND ".join(where) if where else ""
         params.append(limit)
         cur.execute(
@@ -228,7 +235,6 @@ def fetch_recent_transactions(limit: int = 10, tx_type: str | None = None, perso
             SELECT id, type, amount, COALESCE(currency, 'RUB') currency, category, comment, operation_date
             FROM transactions
             {type_filter}
-            {person_filter}
             ORDER BY operation_date DESC, id DESC
             LIMIT %s
             """,
@@ -305,6 +311,8 @@ def fetch_categories(tx_type: str | None = None, person_id: int | None = None):
         if person_id is not None:
             person_filter = "AND person_id = %s"
             params.append(person_id)
+        else:
+            person_filter = "AND (person_id IS NULL OR EXISTS (SELECT 1 FROM persons p WHERE p.id = transactions.person_id AND p.include_in_budget = TRUE))"
         cur.execute(
             f"""
             SELECT category, COALESCE(currency, 'RUB') currency, COUNT(*) operations_count, COALESCE(SUM(amount), 0) total
@@ -334,6 +342,8 @@ def fetch_category_transactions(category: str, limit: int = 50, tx_type: str | N
         if person_id is not None:
             person_filter = "AND person_id = %s"
             params.append(person_id)
+        else:
+            person_filter = "AND (person_id IS NULL OR EXISTS (SELECT 1 FROM persons p WHERE p.id = transactions.person_id AND p.include_in_budget = TRUE))"
         params.append(limit)
         cur.execute(
             f"""
@@ -341,6 +351,7 @@ def fetch_category_transactions(category: str, limit: int = 50, tx_type: str | N
             FROM transactions
             WHERE category = %s
             {type_filter}
+            {person_filter}
             ORDER BY operation_date DESC, id DESC
             LIMIT %s
             """,

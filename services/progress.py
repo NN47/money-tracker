@@ -88,8 +88,12 @@ def get_streak(user_id: int | None) -> int:
 def month_summary(person_id: int | None = None):
     today = moscow_today()
     start, nxt = month_bounds(today)
-    person_sql = " AND person_id = %s" if person_id is not None else ""
-    params = [start, nxt] + ([person_id] if person_id is not None else [])
+    if person_id is not None:
+        person_sql = " AND person_id = %s"
+        params = [start, nxt, person_id]
+    else:
+        person_sql = " AND (person_id IS NULL OR EXISTS (SELECT 1 FROM persons p WHERE p.id = transactions.person_id AND p.include_in_budget = TRUE))"
+        params = [start, nxt]
     with get_connection() as conn:
         cur = dict_cursor(conn)
         cur.execute(

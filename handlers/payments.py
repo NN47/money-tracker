@@ -303,7 +303,7 @@ async def calendar_events_start(message: Message, state: FSMContext):
     person_id, person_name = await get_person_context(state)
     today = date.today()
     await message.answer(
-        f"📅 Календарь событий. 🟢 — доходы, 🔴 — расходы, 📍 — сегодня. Выберите дату, чтобы посмотреть детали.{chr(10) + chr(10) + 'Фильтр: 👤 ' + person_name if person_name else ''}",
+        f"📅 Календарь событий. 🟢 — доходы, 🔴 — расходы, 📍 — сегодня. Выберите дату, чтобы посмотреть детали.{chr(10) + chr(10) + 'Фильтр: 📁 ' + person_name if person_name else ''}",
         reply_markup=calendar_back_kb(),
     )
     await message.answer("Календарь:", reply_markup=calendar_events_kb(today.year, today.month, person_id=person_id))

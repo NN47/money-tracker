@@ -42,6 +42,8 @@ def fetch_calendar_marked_days(year: int, month: int, person_id: int | None = No
         if person_id is not None:
             person_filter = "AND person_id = %s"
             transaction_params.append(person_id)
+        else:
+            person_filter = "AND (person_id IS NULL OR EXISTS (SELECT 1 FROM persons p WHERE p.id = transactions.person_id AND p.include_in_budget = TRUE))"
         cur.execute(
             f"""
             SELECT
@@ -114,6 +116,8 @@ def fetch_calendar_day_events(day: date, person_id: int | None = None) -> dict[s
         if person_id is not None:
             person_filter = "AND person_id = %s"
             transaction_params.append(person_id)
+        else:
+            person_filter = "AND (person_id IS NULL OR EXISTS (SELECT 1 FROM persons p WHERE p.id = transactions.person_id AND p.include_in_budget = TRUE))"
         cur.execute(
             f"""
             SELECT id, type, amount, COALESCE(currency, 'RUB') currency, category, comment

@@ -25,8 +25,10 @@ MAIN_MENU_TEXTS = {
     "📊 Отчёт по расходам",
     "📂 Категории",
     "⚙️ Настройки",
-    "👤 Персоны",
-    "➕ Добавить персону",
+    "📁 Проекты",
+    "➕ Добавить проект",
+    "Учитывать в общем бюджете: Вкл",
+    "Учитывать в общем бюджете: Выкл",
     "💱 Валюта по умолчанию",
     "💱 Конвертер валют",
 }
@@ -152,7 +154,7 @@ def main_menu_kb() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text="💰 Доходы"), KeyboardButton(text="💸 Расходы")],
             [KeyboardButton(text="📅 Календарь"), KeyboardButton(text="📊 Отчёт")],
-            [KeyboardButton(text="👤 Персоны"), KeyboardButton(text="⚙️ Настройки")],
+            [KeyboardButton(text="📁 Проекты"), KeyboardButton(text="⚙️ Настройки")],
             [KeyboardButton(text="💱 Конвертер валют")],
             [KeyboardButton(text="💼 Главный экран")],
         ],
@@ -470,7 +472,7 @@ def currency_choice_kb(currencies: tuple[str, ...]) -> ReplyKeyboardMarkup:
 
 def persons_list_kb(persons) -> InlineKeyboardMarkup | None:
     rows = [
-        [InlineKeyboardButton(text=f"👤 {person['name']}", callback_data=f"person:open:{person['id']}")]
+        [InlineKeyboardButton(text=f"📁 {person['name']}", callback_data=f"person:open:{person['id']}")]
         for person in persons
     ]
     if not rows:
