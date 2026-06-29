@@ -4,7 +4,7 @@ from database import dict_cursor, get_connection
 def create_person(name: str) -> int:
     with get_connection() as conn:
         cur = conn.cursor()
-        cur.execute("INSERT INTO persons(name) VALUES(%s) RETURNING id", (name,))
+        cur.execute("INSERT INTO persons(name, include_in_budget) VALUES(%s, FALSE) RETURNING id", (name,))
         person_id = cur.fetchone()[0]
         cur.close()
     return person_id
@@ -13,7 +13,7 @@ def create_person(name: str) -> int:
 def fetch_persons():
     with get_connection() as conn:
         cur = dict_cursor(conn)
-        cur.execute("SELECT id, name FROM persons ORDER BY LOWER(name), id")
+        cur.execute("SELECT id, name, include_in_budget FROM persons ORDER BY LOWER(name), id")
         rows = cur.fetchall()
         cur.close()
     return rows
@@ -22,7 +22,24 @@ def fetch_persons():
 def fetch_person(person_id: int):
     with get_connection() as conn:
         cur = dict_cursor(conn)
-        cur.execute("SELECT id, name FROM persons WHERE id = %s", (person_id,))
+        cur.execute("SELECT id, name, include_in_budget FROM persons WHERE id = %s", (person_id,))
+        row = cur.fetchone()
+        cur.close()
+    return row
+
+
+def set_person_include_in_budget(person_id: int, include_in_budget: bool):
+    with get_connection() as conn:
+        cur = dict_cursor(conn)
+        cur.execute(
+            """
+            UPDATE persons
+            SET include_in_budget = %s
+            WHERE id = %s
+            RETURNING id, name, include_in_budget
+            """,
+            (include_in_budget, person_id),
+        )
         row = cur.fetchone()
         cur.close()
     return row

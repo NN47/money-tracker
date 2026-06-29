@@ -46,6 +46,7 @@ def init_db() -> None:
                 CREATE TABLE IF NOT EXISTS persons (
                     id SERIAL PRIMARY KEY,
                     name TEXT NOT NULL,
+                    include_in_budget BOOLEAN NOT NULL DEFAULT FALSE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
                 """
@@ -128,6 +129,12 @@ def init_db() -> None:
                 """
             )
 
+            cur.execute(
+                """
+                ALTER TABLE IF EXISTS persons
+                ADD COLUMN IF NOT EXISTS include_in_budget BOOLEAN NOT NULL DEFAULT FALSE
+                """
+            )
             cur.execute(
                 """
                 ALTER TABLE IF EXISTS transactions

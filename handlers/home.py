@@ -53,7 +53,7 @@ async def send_main_screen(message: Message, state: FSMContext) -> None:
     user_id = message.from_user.id if message.from_user else None
     await message.answer(build_financial_order_block(user_id, person_id=person_id))
     if person_id and person_name:
-        await message.answer(f"👤 {person_name}", reply_markup=person_menu_kb())
+        await message.answer(f"📁 {person_name}", reply_markup=person_menu_kb())
     else:
         await message.answer("Главное меню:", reply_markup=main_menu_kb())
 
