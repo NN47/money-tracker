@@ -53,3 +53,11 @@ async def send_main_screen(message: Message, state: FSMContext) -> None:
         await message.answer(f"👤 {person_name}", reply_markup=person_menu_kb())
     else:
         await message.answer("Главное меню:", reply_markup=main_menu_kb())
+
+
+async def send_currency_converter_stub(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await message.answer(
+        "💱 Конвертер валют скоро появится.",
+        reply_markup=main_menu_kb(),
+    )

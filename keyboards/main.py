@@ -28,6 +28,7 @@ MAIN_MENU_TEXTS = {
     "👤 Персоны",
     "➕ Добавить персону",
     "💱 Валюта по умолчанию",
+    "💱 Конвертер валют",
 }
 
 
@@ -152,6 +153,7 @@ def main_menu_kb() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="💰 Доходы"), KeyboardButton(text="💸 Расходы")],
             [KeyboardButton(text="📅 Календарь"), KeyboardButton(text="📊 Отчёт")],
             [KeyboardButton(text="👤 Персоны"), KeyboardButton(text="⚙️ Настройки")],
+            [KeyboardButton(text="💱 Конвертер валют")],
             [KeyboardButton(text="💼 Главный экран")],
         ],
         resize_keyboard=True,
