@@ -3,8 +3,9 @@ from aiogram.types import InlineKeyboardButton
 from aiogram.types import Message
 
 from database import dict_cursor, get_connection
-from keyboards.main import dashboard_actions_kb, main_menu_kb, recurring_due_kb
+from keyboards.main import dashboard_actions_kb, main_menu_kb, person_menu_kb, recurring_due_kb
 from services.recurring_payments import fetch_unpaid_due_recurring_payments, moscow_today
+from services.persons import get_person_context
 from services.reports import build_dashboard
 
 
@@ -40,9 +41,15 @@ def dashboard_due_action_rows(scheduled_payments, recurring_operations):
 
 
 async def send_main_screen(message: Message, state: FSMContext) -> None:
+    person_id, person_name = await get_person_context(state)
     await state.clear()
+    if person_id and person_name:
+        await state.update_data(person_id=person_id, person_name=person_name)
     scheduled_payments = fetch_unpaid_due_scheduled_payments()
     unpaid_operations = fetch_unpaid_due_recurring_payments()
     extra_rows = dashboard_due_action_rows(scheduled_payments, unpaid_operations)
-    await message.answer(build_dashboard(), reply_markup=dashboard_actions_kb(extra_rows), parse_mode="HTML")
-    await message.answer("Главное меню:", reply_markup=main_menu_kb())
+    await message.answer(build_dashboard(person_id=person_id, person_name=person_name), reply_markup=dashboard_actions_kb(extra_rows), parse_mode="HTML")
+    if person_id and person_name:
+        await message.answer(f"👤 {person_name}", reply_markup=person_menu_kb())
+    else:
+        await message.answer("Главное меню:", reply_markup=main_menu_kb())
