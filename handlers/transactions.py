@@ -26,6 +26,8 @@ from services.users import get_user_default_currency
 from handlers.home import send_main_screen
 from services.persons import clear_work_data_keep_person, get_person_context
 from services.reports import build_summary_report, fetch_categories, fetch_recent_transactions
+from services.progress import progress_after_operation
+from services.texts import PROGRESS_TEXTS
 
 router = Router()
 
@@ -326,5 +328,7 @@ async def transaction_comment(message: Message, state: FSMContext):
             (data["type"], data["amount"], data.get("currency") or "RUB", data["category"], comment, data["operation_date"], data.get("person_id")),
         )
         cur.close()
-    await message.answer("Сохранено ✅")
+    user_id = message.from_user.id if message.from_user else None
+    saved_text = PROGRESS_TEXTS["expense_saved" if data["type"] == "expense" else "income_saved"]
+    await message.answer(f"{saved_text}\n\n{progress_after_operation(user_id, data.get('person_id'))}")
     await _back_to_home(message, state)

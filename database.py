@@ -97,6 +97,26 @@ def init_db() -> None:
 
             cur.execute(
                 """
+                CREATE TABLE IF NOT EXISTS user_progress (
+                    user_id BIGINT PRIMARY KEY,
+                    last_entry_date DATE,
+                    streak_days INTEGER NOT NULL DEFAULT 0
+                )
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_achievements (
+                    user_id BIGINT NOT NULL,
+                    achievement_key TEXT NOT NULL,
+                    unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY(user_id, achievement_key)
+                )
+                """
+            )
+
+            cur.execute(
+                """
                 CREATE TABLE IF NOT EXISTS recurring_payments_log (
                     id SERIAL PRIMARY KEY,
                     recurring_operation_id INTEGER REFERENCES recurring_operations(id) ON DELETE CASCADE,

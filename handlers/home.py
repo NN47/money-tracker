@@ -7,6 +7,7 @@ from keyboards.main import dashboard_actions_kb, main_menu_kb, person_menu_kb, r
 from services.recurring_payments import fetch_unpaid_due_recurring_payments, moscow_today
 from services.persons import get_person_context
 from services.reports import build_dashboard
+from services.progress import build_financial_order_block
 
 
 def fetch_unpaid_due_scheduled_payments():
@@ -49,6 +50,8 @@ async def send_main_screen(message: Message, state: FSMContext) -> None:
     unpaid_operations = fetch_unpaid_due_recurring_payments()
     extra_rows = dashboard_due_action_rows(scheduled_payments, unpaid_operations)
     await message.answer(build_dashboard(person_id=person_id, person_name=person_name), reply_markup=dashboard_actions_kb(extra_rows), parse_mode="HTML")
+    user_id = message.from_user.id if message.from_user else None
+    await message.answer(build_financial_order_block(user_id, person_id=person_id))
     if person_id and person_name:
         await message.answer(f"👤 {person_name}", reply_markup=person_menu_kb())
     else:

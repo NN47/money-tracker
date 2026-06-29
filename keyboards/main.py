@@ -112,7 +112,7 @@ def calendar_kb(
 
             row.append(
                 InlineKeyboardButton(
-                    text=_format_calendar_day(day, day_marks.get(day), today == date(year, month, day)),
+                    text=_format_calendar_day(day, day_marks.get(day), prefix != "events" and today == date(year, month, day)),
                     callback_data=_calendar_callback(prefix, "select", year, month, day),
                 )
             )
