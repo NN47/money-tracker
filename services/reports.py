@@ -151,37 +151,42 @@ def _fetch_main_data(person_id: int | None = None):
         income = _totals_by_currency(cur.fetchall())
         cur.execute("SELECT COALESCE(currency, 'RUB') currency, COALESCE(SUM(amount),0) total FROM transactions WHERE type='expense' AND operation_date >= %s AND operation_date < %s" + person_filter + " GROUP BY COALESCE(currency, 'RUB')", (start, nxt, *person_params))
         expense = _totals_by_currency(cur.fetchall())
-        cur.execute("SELECT id, title, amount, payment_date FROM scheduled_payments WHERE is_paid=FALSE AND payment_date < %s ORDER BY payment_date, id LIMIT 10", (today,))
-        overdue_payments = cur.fetchall()
-        cur.execute("SELECT id, title, amount, payment_date FROM scheduled_payments WHERE is_paid=FALSE AND payment_date BETWEEN %s AND %s ORDER BY payment_date LIMIT 10", (today, horizon))
-        payments = cur.fetchall()
-        cur.execute(
-            """
-            SELECT
-                ro.id,
-                ro.title,
-                ro.type,
-                ro.amount,
-                ro.day_of_month,
-                COALESCE(
-                    array_agg(l.payment_date ORDER BY l.payment_date)
-                        FILTER (WHERE l.payment_date IS NOT NULL),
-                    ARRAY[]::date[]
-                ) AS paid_payment_dates
-            FROM recurring_operations ro
-            LEFT JOIN recurring_payments_log l
-                ON l.recurring_operation_id = ro.id
-               AND l.payment_date BETWEEN %s AND %s
-            WHERE ro.is_active=TRUE
-              AND ro.type IN ('payment', 'expense')
-            GROUP BY ro.id, ro.title, ro.type, ro.amount, ro.day_of_month
-            ORDER BY ro.day_of_month, ro.id
-            """,
-            (today, horizon),
-        )
-        payable_recurring = cur.fetchall()
+        if person_id is None:
+            cur.execute("SELECT id, title, amount, payment_date FROM scheduled_payments WHERE is_paid=FALSE AND payment_date < %s ORDER BY payment_date, id LIMIT 10", (today,))
+            overdue_payments = cur.fetchall()
+            cur.execute("SELECT id, title, amount, payment_date FROM scheduled_payments WHERE is_paid=FALSE AND payment_date BETWEEN %s AND %s ORDER BY payment_date LIMIT 10", (today, horizon))
+            payments = cur.fetchall()
+            cur.execute(
+                """
+                SELECT
+                    ro.id,
+                    ro.title,
+                    ro.type,
+                    ro.amount,
+                    ro.day_of_month,
+                    COALESCE(
+                        array_agg(l.payment_date ORDER BY l.payment_date)
+                            FILTER (WHERE l.payment_date IS NOT NULL),
+                        ARRAY[]::date[]
+                    ) AS paid_payment_dates
+                FROM recurring_operations ro
+                LEFT JOIN recurring_payments_log l
+                    ON l.recurring_operation_id = ro.id
+                   AND l.payment_date BETWEEN %s AND %s
+                WHERE ro.is_active=TRUE
+                  AND ro.type IN ('payment', 'expense')
+                GROUP BY ro.id, ro.title, ro.type, ro.amount, ro.day_of_month
+                ORDER BY ro.day_of_month, ro.id
+                """,
+                (today, horizon),
+            )
+            payable_recurring = cur.fetchall()
+        else:
+            overdue_payments = []
+            payments = []
+            payable_recurring = []
         cur.close()
-    overdue_recurring = _overdue_recurring_payments(today)
+    overdue_recurring = _overdue_recurring_payments(today) if person_id is None else []
     recurring_upcoming = upcoming_recurring_payments(payable_recurring, today, horizon)[:10]
     return today, income, expense, overdue_payments, overdue_recurring, payments, recurring_upcoming
 
@@ -198,7 +203,7 @@ def build_dashboard(person_id: int | None = None, person_name: str | None = None
         f"💸 <b>Расходы:</b> <b>{_format_totals(expense)}</b>",
         f"⚖️ <b>Баланс:</b> <b>{_format_totals(balance)}</b>",
     ]
-    upcoming_payments = sorted([*payments, *recurring], key=lambda row: (row["payment_date"], row["id"]))[:10]
+    upcoming_payments = [] if person_id is not None else sorted([*payments, *recurring], key=lambda row: (row["payment_date"], row["id"]))[:10]
     if upcoming_payments:
         lines.extend(["", "<b>📅 Платежи в ближайшие 10 дней:</b>"])
         for r in upcoming_payments:
@@ -282,14 +287,14 @@ def build_summary_report(transactions=None, tx_type: str | None = None, person_i
         lines.append("Операций пока нет")
     if tx_type != "income":
         lines.append("")
-        overdue = sorted([*overdue_payments, *overdue_recurring], key=lambda row: (row["payment_date"], row["id"]))[:10]
+        overdue = [] if person_id is not None else sorted([*overdue_payments, *overdue_recurring], key=lambda row: (row["payment_date"], row["id"]))[:10]
         if overdue:
             lines.append("<b>⚠️ Просроченные платежи:</b>")
             for r in overdue:
                 lines.append(_format_payment_line(r, include_year=True))
             lines.append("")
         lines.append(f"<b>📅 Ближайшие платежи на {UPCOMING_PAYMENTS_DAYS} дней:</b>")
-        upcoming_payments = sorted([*payments, *recurring], key=lambda row: (row["payment_date"], row["id"]))[:10]
+        upcoming_payments = [] if person_id is not None else sorted([*payments, *recurring], key=lambda row: (row["payment_date"], row["id"]))[:10]
         if upcoming_payments:
             for r in upcoming_payments:
                 lines.append(_format_payment_line(r))
