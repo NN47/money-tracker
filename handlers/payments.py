@@ -48,6 +48,8 @@ from services.recurring_payments import (
     update_recurring_operation,
 )
 from services.reports import build_dashboard, fetch_categories, money, money_currency
+from services.progress import days_until_next_payment_text, progress_after_operation
+from services.texts import PROGRESS_TEXTS
 from handlers.home import dashboard_due_action_rows, fetch_unpaid_due_scheduled_payments
 
 router = Router()
@@ -472,9 +474,11 @@ async def payment_mark_done(callback: CallbackQuery):
         return
 
     await remove_inline_keyboard(callback)
+    user_id = callback.from_user.id if callback.from_user else None
+    text = PROGRESS_TEXTS["payment_done"].format(days_text=days_until_next_payment_text())
     await send_callback_message(
         callback,
-        f"Платёж «{result['title']}» отмечен как оплаченный и записан в расходы ✅",
+        f"{text}\n\n{progress_after_operation(user_id)}",
         reply_markup=main_menu_kb(),
     )
 
@@ -508,9 +512,11 @@ async def recurring_payment_mark_paid(callback: CallbackQuery):
             asyncio.to_thread(fetch_unpaid_due_recurring_payments),
             asyncio.to_thread(build_dashboard),
         )
+        user_id = callback.from_user.id if callback.from_user else None
+        text = PROGRESS_TEXTS["payment_done"].format(days_text=days_until_next_payment_text())
         await send_callback_message(
             callback,
-            f"Платёж «{title}» записан в расходы ✅",
+            f"{text}\n\n{progress_after_operation(user_id)}",
             reply_markup=main_menu_kb(),
         )
         await send_callback_message(
