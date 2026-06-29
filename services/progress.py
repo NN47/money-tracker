@@ -223,12 +223,24 @@ def fetch_next_payment():
     return sorted(candidates, key=lambda row: (row["payment_date"], row["id"]))[0] if candidates else None
 
 
+def _days_word(days: int) -> str:
+    if 11 <= days % 100 <= 14:
+        return "дней"
+    if days % 10 == 1:
+        return "день"
+    if 2 <= days % 10 <= 4:
+        return "дня"
+    return "дней"
+
+
 def days_until_next_payment_text() -> str:
     row = fetch_next_payment()
     if not row:
         return "платежей нет"
     days = (row["payment_date"] - moscow_today()).days
-    return f"{days} дней" if days != 1 else "1 день"
+    if days <= 1:
+        return "завтра"
+    return f"через {days} {_days_word(days)}"
 
 
 def build_financial_order_block(user_id: int | None, person_id: int | None = None) -> str:
