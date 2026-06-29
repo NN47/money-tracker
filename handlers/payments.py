@@ -36,6 +36,7 @@ from services.calendar_events import (
     fetch_calendar_marked_days,
 )
 from services.dates import parse_future_date
+from services.persons import clear_work_data_keep_person, get_person_context
 from services.recurring_payments import (
     deactivate_recurring_operation,
     fetch_active_recurring_operation,
@@ -130,8 +131,8 @@ async def _back_to_home(message: Message, state: FSMContext):
     await message.answer("Главное меню:", reply_markup=main_menu_kb())
 
 
-def calendar_events_kb(year: int, month: int):
-    marked_days = fetch_calendar_marked_days(year, month)
+def calendar_events_kb(year: int, month: int, person_id: int | None = None):
+    marked_days = fetch_calendar_marked_days(year, month, person_id=person_id)
     return calendar_kb("events", year, month, marked_days)
 
 
@@ -296,17 +297,18 @@ async def menu_during_fsm(message: Message, state: FSMContext):
 
 @router.message(F.text == "📅 Календарь")
 async def calendar_events_start(message: Message, state: FSMContext):
-    await state.clear()
+    await clear_work_data_keep_person(state)
+    person_id, person_name = await get_person_context(state)
     today = date.today()
     await message.answer(
-        "📅 Календарь событий. 🟢 — доходы, 🔴 — расходы, 📍 — сегодня. Выберите дату, чтобы посмотреть детали.",
+        f"📅 Календарь событий. 🟢 — доходы, 🔴 — расходы, 📍 — сегодня. Выберите дату, чтобы посмотреть детали.{chr(10) + chr(10) + 'Фильтр: 👤 ' + person_name if person_name else ''}",
         reply_markup=calendar_back_kb(),
     )
-    await message.answer("Календарь:", reply_markup=calendar_events_kb(today.year, today.month))
+    await message.answer("Календарь:", reply_markup=calendar_events_kb(today.year, today.month, person_id=person_id))
 
 
 @router.callback_query(F.data.startswith("cal:events:"))
-async def calendar_events(callback: CallbackQuery):
+async def calendar_events(callback: CallbackQuery, state: FSMContext):
     parts = callback.data.split(":")
     try:
         _, _, action, year_raw, month_raw, day_raw = parts
@@ -323,7 +325,7 @@ async def calendar_events(callback: CallbackQuery):
 
     if action == "month":
         if callback.message:
-            await callback.message.edit_reply_markup(reply_markup=calendar_events_kb(year, month))
+            await callback.message.edit_reply_markup(reply_markup=calendar_events_kb(year, month, person_id=(await get_person_context(state))[0]))
         await callback.answer()
         return
 
@@ -337,7 +339,8 @@ async def calendar_events(callback: CallbackQuery):
         await callback.answer("Не понял дату", show_alert=True)
         return
 
-    events = fetch_calendar_day_events(selected_date)
+    person_id, _person_name = await get_person_context(state)
+    events = fetch_calendar_day_events(selected_date, person_id=person_id)
     await send_callback_message(callback, build_calendar_day_events(selected_date, events), reply_markup=calendar_back_kb())
     await callback.answer("События загружены")
 

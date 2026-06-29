@@ -21,6 +21,7 @@ from keyboards.main import (
 from services.dates import parse_transaction_date
 from handlers.home import send_main_screen
 from services.currencies import extract_currency
+from services.persons import clear_work_data_keep_person, get_person_context
 from services.reports import (
     build_categories_report,
     build_category_report,
@@ -83,12 +84,14 @@ def _parse_money(raw: str) -> float:
 
 
 async def _send_report(message: Message, tx_type: str | None = None, state: FSMContext | None = None) -> None:
+    person_id = person_name = None
     if state is not None:
+        person_id, person_name = await get_person_context(state)
         await state.update_data(report_scope=tx_type or "all")
-    transactions = fetch_recent_transactions(tx_type=tx_type)
+    transactions = fetch_recent_transactions(tx_type=tx_type, person_id=person_id)
     await message.answer("<b>Меню отчёта:</b>", reply_markup=report_menu_kb(), parse_mode="HTML")
     await message.answer(
-        build_summary_report(transactions=transactions, tx_type=tx_type),
+        build_summary_report(transactions=transactions, tx_type=tx_type, person_id=person_id, person_name=person_name),
         reply_markup=report_transactions_kb(transactions, scope=tx_type or "all"),
         parse_mode="HTML",
     )
@@ -99,19 +102,19 @@ async def report(message: Message, state: FSMContext):
     data = await state.get_data()
     scope = data.get("report_scope")
     tx_type = scope if scope in {"income", "expense"} else None
-    await state.clear()
+    await clear_work_data_keep_person(state)
     await _send_report(message, tx_type=tx_type, state=state)
 
 
 @router.message(F.text == "📊 Отчёт по доходам")
 async def income_report(message: Message, state: FSMContext):
-    await state.clear()
+    await clear_work_data_keep_person(state)
     await _send_report(message, tx_type="income", state=state)
 
 
 @router.message(F.text == "📊 Отчёт по расходам")
 async def expense_report(message: Message, state: FSMContext):
-    await state.clear()
+    await clear_work_data_keep_person(state)
     await _send_report(message, tx_type="expense", state=state)
 
 
@@ -120,7 +123,8 @@ async def categories_report(message: Message, state: FSMContext):
     data = await state.get_data()
     scope = data.get("report_scope", "all")
     tx_type = scope if scope in {"income", "expense"} else None
-    categories = fetch_categories(tx_type=tx_type)
+    person_id, _person_name = await get_person_context(state)
+    categories = fetch_categories(tx_type=tx_type, person_id=person_id)
     await message.answer(
         build_categories_report(categories, tx_type=tx_type),
         reply_markup=report_categories_kb([row["category"] for row in categories], scope=scope),
@@ -129,7 +133,7 @@ async def categories_report(message: Message, state: FSMContext):
 
 
 @router.callback_query(F.data.startswith("report_cat:"))
-async def category_report_callback(callback: CallbackQuery):
+async def category_report_callback(callback: CallbackQuery, state: FSMContext):
     try:
         _, scope, encoded_category = callback.data.split(":", maxsplit=2)
     except (AttributeError, ValueError):
@@ -137,7 +141,8 @@ async def category_report_callback(callback: CallbackQuery):
         return
     tx_type = scope if scope in {"income", "expense"} else None
     category = unquote(encoded_category)
-    transactions = fetch_category_transactions(category, tx_type=tx_type)
+    person_id, _person_name = await get_person_context(state)
+    transactions = fetch_category_transactions(category, tx_type=tx_type, person_id=person_id)
     await callback.answer("Категория выбрана")
     if callback.message:
         await callback.message.answer(
@@ -149,10 +154,11 @@ async def category_report_callback(callback: CallbackQuery):
 
 @router.message(F.text == "📋 Все операции")
 async def all_transactions(message: Message, state: FSMContext):
-    await state.clear()
-    transactions = fetch_recent_transactions(limit=50)
+    await clear_work_data_keep_person(state)
+    person_id, person_name = await get_person_context(state)
+    transactions = fetch_recent_transactions(limit=50, person_id=person_id)
     await message.answer(
-        build_transactions_report(transactions=transactions),
+        build_transactions_report(transactions=transactions, person_id=person_id, person_name=person_name),
         reply_markup=report_transactions_kb(transactions),
         parse_mode="HTML",
     )
@@ -164,13 +170,14 @@ async def report_back(message: Message, state: FSMContext):
 
 
 @router.callback_query(F.data.startswith("report_edit_recent:"))
-async def report_edit_recent(callback: CallbackQuery):
+async def report_edit_recent(callback: CallbackQuery, state: FSMContext):
     try:
         scope = callback.data.split(":", maxsplit=1)[1]
     except (AttributeError, IndexError):
         scope = "all"
     tx_type = scope if scope in {"income", "expense"} else None
-    transactions = fetch_recent_transactions(tx_type=tx_type)
+    person_id, _person_name = await get_person_context(state)
+    transactions = fetch_recent_transactions(tx_type=tx_type, person_id=person_id)
 
     if not transactions:
         await callback.answer("Операций пока нет", show_alert=True)

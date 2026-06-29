@@ -24,6 +24,7 @@ from services.currencies import extract_currency
 from services.dates import parse_transaction_date
 from services.users import get_user_default_currency
 from handlers.home import send_main_screen
+from services.persons import clear_work_data_keep_person, get_person_context
 from services.reports import build_summary_report, fetch_categories, fetch_recent_transactions
 
 router = Router()
@@ -153,7 +154,7 @@ def _amount_reply_markup(tx_type: str):
 
 
 async def _start_transaction(message: Message, state: FSMContext, tx_type: str):
-    await state.clear()
+    await clear_work_data_keep_person(state)
     await state.update_data(type=tx_type)
     await state.set_state(TransactionStates.waiting_amount)
     await message.answer(_amount_prompt(tx_type), reply_markup=_amount_reply_markup(tx_type))
@@ -161,18 +162,20 @@ async def _start_transaction(message: Message, state: FSMContext, tx_type: str):
 
 @router.message(F.text == "💰 Доходы")
 async def income_section(message: Message, state: FSMContext):
-    await state.clear()
+    await clear_work_data_keep_person(state)
+    person_id, person_name = await get_person_context(state)
     await state.update_data(report_scope="income")
-    transactions = fetch_recent_transactions(tx_type="income")
-    await message.answer(build_summary_report(transactions=transactions, tx_type="income"), reply_markup=section_menu_kb("income"), parse_mode="HTML")
+    transactions = fetch_recent_transactions(tx_type="income", person_id=person_id)
+    await message.answer(build_summary_report(transactions=transactions, tx_type="income", person_id=person_id, person_name=person_name), reply_markup=section_menu_kb("income"), parse_mode="HTML")
 
 
 @router.message(F.text == "💸 Расходы")
 async def expense_section(message: Message, state: FSMContext):
-    await state.clear()
+    await clear_work_data_keep_person(state)
+    person_id, person_name = await get_person_context(state)
     await state.update_data(report_scope="expense")
-    transactions = fetch_recent_transactions(tx_type="expense")
-    await message.answer(build_summary_report(transactions=transactions, tx_type="expense"), reply_markup=section_menu_kb("expense"), parse_mode="HTML")
+    transactions = fetch_recent_transactions(tx_type="expense", person_id=person_id)
+    await message.answer(build_summary_report(transactions=transactions, tx_type="expense", person_id=person_id, person_name=person_name), reply_markup=section_menu_kb("expense"), parse_mode="HTML")
 
 
 @router.message(F.text.in_({"➕ Доход", "➕ Добавить доход"}))
@@ -198,7 +201,7 @@ async def quick_transaction(callback: CallbackQuery, state: FSMContext):
 
 async def _ask_category(message: Message, state: FSMContext, prompt: str = "Выберите категорию кнопкой или введите новую текстом:"):
     data = await state.get_data()
-    categories = [row["category"] for row in fetch_categories(tx_type=data.get("type"))]
+    categories = [row["category"] for row in fetch_categories(tx_type=data.get("type"), person_id=data.get("person_id"))]
     await message.answer(prompt, reply_markup=category_choice_back_kb(categories))
 
 
@@ -317,10 +320,10 @@ async def transaction_comment(message: Message, state: FSMContext):
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO transactions(type, amount, currency, category, comment, operation_date)
-            VALUES(%s, %s, %s, %s, %s, %s)
+            INSERT INTO transactions(type, amount, currency, category, comment, operation_date, person_id)
+            VALUES(%s, %s, %s, %s, %s, %s, %s)
             """,
-            (data["type"], data["amount"], data.get("currency") or "RUB", data["category"], comment, data["operation_date"]),
+            (data["type"], data["amount"], data.get("currency") or "RUB", data["category"], comment, data["operation_date"], data.get("person_id")),
         )
         cur.close()
     await message.answer("Сохранено ✅")

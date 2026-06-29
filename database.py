@@ -43,6 +43,15 @@ def init_db() -> None:
             )
             cur.execute(
                 """
+                CREATE TABLE IF NOT EXISTS persons (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            cur.execute(
+                """
                 CREATE TABLE IF NOT EXISTS transactions (
                     id SERIAL PRIMARY KEY,
                     type TEXT NOT NULL,
@@ -51,6 +60,7 @@ def init_db() -> None:
                     category TEXT,
                     comment TEXT,
                     operation_date DATE NOT NULL DEFAULT CURRENT_DATE,
+                    person_id INTEGER REFERENCES persons(id) ON DELETE SET NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
                 """
@@ -102,6 +112,12 @@ def init_db() -> None:
                 """
                 ALTER TABLE IF EXISTS transactions
                 ADD COLUMN IF NOT EXISTS operation_date DATE
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE IF EXISTS transactions
+                ADD COLUMN IF NOT EXISTS person_id INTEGER REFERENCES persons(id) ON DELETE SET NULL
                 """
             )
             cur.execute(

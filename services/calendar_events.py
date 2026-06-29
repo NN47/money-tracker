@@ -20,7 +20,7 @@ def month_bounds(year: int, month: int) -> tuple[date, date]:
     return start, date(year, month + 1, 1)
 
 
-def fetch_calendar_marked_days(year: int, month: int) -> dict[int, str]:
+def fetch_calendar_marked_days(year: int, month: int, person_id: int | None = None) -> dict[int, str]:
     start, end = month_bounds(year, month)
     _, days_in_month = monthrange(year, month)
 
@@ -37,8 +37,13 @@ def fetch_calendar_marked_days(year: int, month: int) -> dict[int, str]:
         )
         scheduled_days = {row["day"] for row in cur.fetchall()}
 
+        person_filter = ""
+        transaction_params = [start, end]
+        if person_id is not None:
+            person_filter = "AND person_id = %s"
+            transaction_params.append(person_id)
         cur.execute(
-            """
+            f"""
             SELECT
                 EXTRACT(DAY FROM operation_date)::int AS day,
                 BOOL_OR(type = 'income') AS has_income,
@@ -46,9 +51,10 @@ def fetch_calendar_marked_days(year: int, month: int) -> dict[int, str]:
             FROM transactions
             WHERE operation_date >= %s
               AND operation_date < %s
+              {person_filter}
             GROUP BY day
             """,
-            (start, end),
+            transaction_params,
         )
         transaction_marks = {}
         for row in cur.fetchall():
@@ -77,7 +83,7 @@ def fetch_calendar_marked_days(year: int, month: int) -> dict[int, str]:
     return marks
 
 
-def fetch_calendar_day_events(day: date) -> dict[str, list]:
+def fetch_calendar_day_events(day: date, person_id: int | None = None) -> dict[str, list]:
     with get_connection() as conn:
         cur = dict_cursor(conn)
         cur.execute(
@@ -103,14 +109,20 @@ def fetch_calendar_day_events(day: date) -> dict[str, list]:
         )
         recurring = cur.fetchall()
 
+        person_filter = ""
+        transaction_params = [day]
+        if person_id is not None:
+            person_filter = "AND person_id = %s"
+            transaction_params.append(person_id)
         cur.execute(
-            """
+            f"""
             SELECT id, type, amount, COALESCE(currency, 'RUB') currency, category, comment
             FROM transactions
             WHERE operation_date = %s
+              {person_filter}
             ORDER BY id DESC
             """,
-            (day,),
+            transaction_params,
         )
         transactions = cur.fetchall()
         cur.close()

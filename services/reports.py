@@ -124,15 +124,27 @@ def _format_payment_line(row, *, include_year: bool = False) -> str:
     )
 
 
-def _fetch_main_data():
+def _person_filter_sql(person_id: int | None, prefix: str = "") -> tuple[str, list]:
+    if person_id is None:
+        return "", []
+    column = f"{prefix}person_id" if prefix else "person_id"
+    return f" AND {column} = %s", [person_id]
+
+
+def _person_title(person_name: str | None) -> list[str]:
+    return [f"👤 <b>{html.escape(person_name)}</b>", "", f"Фильтр: 👤 {html.escape(person_name)}", ""] if person_name else []
+
+
+def _fetch_main_data(person_id: int | None = None):
     today = moscow_today()
     start, nxt = month_bounds(today)
     horizon = today + timedelta(days=UPCOMING_PAYMENTS_DAYS)
     with get_connection() as conn:
         cur = dict_cursor(conn)
-        cur.execute("SELECT COALESCE(currency, 'RUB') currency, COALESCE(SUM(amount),0) total FROM transactions WHERE type='income' AND operation_date >= %s AND operation_date < %s GROUP BY COALESCE(currency, 'RUB')", (start, nxt))
+        person_filter, person_params = _person_filter_sql(person_id)
+        cur.execute("SELECT COALESCE(currency, 'RUB') currency, COALESCE(SUM(amount),0) total FROM transactions WHERE type='income' AND operation_date >= %s AND operation_date < %s" + person_filter + " GROUP BY COALESCE(currency, 'RUB')", (start, nxt, *person_params))
         income = _totals_by_currency(cur.fetchall())
-        cur.execute("SELECT COALESCE(currency, 'RUB') currency, COALESCE(SUM(amount),0) total FROM transactions WHERE type='expense' AND operation_date >= %s AND operation_date < %s GROUP BY COALESCE(currency, 'RUB')", (start, nxt))
+        cur.execute("SELECT COALESCE(currency, 'RUB') currency, COALESCE(SUM(amount),0) total FROM transactions WHERE type='expense' AND operation_date >= %s AND operation_date < %s" + person_filter + " GROUP BY COALESCE(currency, 'RUB')", (start, nxt, *person_params))
         expense = _totals_by_currency(cur.fetchall())
         cur.execute("SELECT id, title, amount, payment_date FROM scheduled_payments WHERE is_paid=FALSE AND payment_date < %s ORDER BY payment_date, id LIMIT 10", (today,))
         overdue_payments = cur.fetchall()
@@ -169,10 +181,11 @@ def _fetch_main_data():
     return today, income, expense, overdue_payments, overdue_recurring, payments, recurring_upcoming
 
 
-def build_dashboard() -> str:
-    today, income, expense, _overdue_payments, _overdue_recurring, payments, recurring = _fetch_main_data()
+def build_dashboard(person_id: int | None = None, person_name: str | None = None) -> str:
+    today, income, expense, _overdue_payments, _overdue_recurring, payments, recurring = _fetch_main_data(person_id=person_id)
     balance = _subtract_totals(income, expense)
     lines = [
+        *_person_title(person_name),
         "💼 Главный экран",
         "",
         f"📊 <b>{format_russian_month_year(today)}</b>",
@@ -196,20 +209,26 @@ def _format_transaction_date(operation_date: date, period_start: date, period_en
     return operation_date.strftime("%d.%m.%Y")
 
 
-def fetch_recent_transactions(limit: int = 10, tx_type: str | None = None):
+def fetch_recent_transactions(limit: int = 10, tx_type: str | None = None, person_id: int | None = None):
     with get_connection() as conn:
         cur = dict_cursor(conn)
         params: list = []
         type_filter = ""
+        where = []
         if tx_type:
-            type_filter = "WHERE type = %s"
+            where.append("type = %s")
             params.append(tx_type)
+        if person_id is not None:
+            where.append("person_id = %s")
+            params.append(person_id)
+        type_filter = "WHERE " + " AND ".join(where) if where else ""
         params.append(limit)
         cur.execute(
             f"""
             SELECT id, type, amount, COALESCE(currency, 'RUB') currency, category, comment, operation_date
             FROM transactions
             {type_filter}
+            {person_filter}
             ORDER BY operation_date DESC, id DESC
             LIMIT %s
             """,
@@ -228,10 +247,10 @@ def _format_transaction_line(row, start: date, end: date) -> str:
     return f"<b>{tx_date}</b> <b>{sign}{money_currency(float(row['amount']), row.get('currency'))}</b> — <b>{category}</b>{comment}"
 
 
-def build_summary_report(transactions=None, tx_type: str | None = None) -> str:
-    today, income, expense, overdue_payments, overdue_recurring, payments, recurring = _fetch_main_data()
+def build_summary_report(transactions=None, tx_type: str | None = None, person_id: int | None = None, person_name: str | None = None) -> str:
+    today, income, expense, overdue_payments, overdue_recurring, payments, recurring = _fetch_main_data(person_id=person_id)
     balance = _subtract_totals(income, expense)
-    tx = fetch_recent_transactions(tx_type=tx_type) if transactions is None else transactions
+    tx = fetch_recent_transactions(tx_type=tx_type, person_id=person_id) if transactions is None else transactions
     start, nxt = month_bounds(today)
     if tx_type == "income":
         title = "📊 <b>Отчёт по доходам</b>"
@@ -249,7 +268,7 @@ def build_summary_report(transactions=None, tx_type: str | None = None) -> str:
             f"⚖️ <b>Баланс:</b> <b>{_format_totals(balance)}</b>",
         ]
         recent_title = "<b>🧾 Последние 10 операций:</b>"
-    lines = [title, "", f"🗓 <b>Период:</b> <b>{format_russian_month_year(today)}</b>", *total_lines, "", recent_title]
+    lines = [*_person_title(person_name), title, "", f"🗓 <b>Период:</b> <b>{format_russian_month_year(today)}</b>", *total_lines, "", recent_title]
     if tx:
         for row in tx:
             lines.append(_format_transaction_line(row, start, nxt))
@@ -274,7 +293,7 @@ def build_summary_report(transactions=None, tx_type: str | None = None) -> str:
 
 
 
-def fetch_categories(tx_type: str | None = None):
+def fetch_categories(tx_type: str | None = None, person_id: int | None = None):
     with get_connection() as conn:
         cur = dict_cursor(conn)
         params: list = []
@@ -282,12 +301,17 @@ def fetch_categories(tx_type: str | None = None):
         if tx_type:
             type_filter = "AND type = %s"
             params.append(tx_type)
+        person_filter = ""
+        if person_id is not None:
+            person_filter = "AND person_id = %s"
+            params.append(person_id)
         cur.execute(
             f"""
             SELECT category, COALESCE(currency, 'RUB') currency, COUNT(*) operations_count, COALESCE(SUM(amount), 0) total
             FROM transactions
             WHERE COALESCE(NULLIF(TRIM(category), ''), '') <> ''
             {type_filter}
+            {person_filter}
             GROUP BY category, COALESCE(currency, 'RUB')
             ORDER BY LOWER(category)
             """,
@@ -298,7 +322,7 @@ def fetch_categories(tx_type: str | None = None):
     return categories
 
 
-def fetch_category_transactions(category: str, limit: int = 50, tx_type: str | None = None):
+def fetch_category_transactions(category: str, limit: int = 50, tx_type: str | None = None, person_id: int | None = None):
     with get_connection() as conn:
         cur = dict_cursor(conn)
         params: list = [category]
@@ -306,6 +330,10 @@ def fetch_category_transactions(category: str, limit: int = 50, tx_type: str | N
         if tx_type:
             type_filter = "AND type = %s"
             params.append(tx_type)
+        person_filter = ""
+        if person_id is not None:
+            person_filter = "AND person_id = %s"
+            params.append(person_id)
         params.append(limit)
         cur.execute(
             f"""
@@ -374,11 +402,11 @@ def build_category_report(category: str, transactions, tx_type: str | None = Non
         lines.append("Операций пока нет")
     return "\n".join(lines)
 
-def build_transactions_report(limit: int = 50, transactions=None, tx_type: str | None = None) -> str:
+def build_transactions_report(limit: int = 50, transactions=None, tx_type: str | None = None, person_id: int | None = None, person_name: str | None = None) -> str:
     today = date.today()
     start, nxt = month_bounds(today)
-    tx = fetch_recent_transactions(limit=limit, tx_type=tx_type) if transactions is None else transactions
-    lines = ["📋 <b>Все операции</b>", "", "<b>🧾 Список операций:</b>"]
+    tx = fetch_recent_transactions(limit=limit, tx_type=tx_type, person_id=person_id) if transactions is None else transactions
+    lines = [*_person_title(person_name), "📋 <b>Все операции</b>", "", "<b>🧾 Список операций:</b>"]
     if not tx:
         lines.append("Операций пока нет")
         return "\n".join(lines)
