@@ -94,6 +94,28 @@ class OverduePaymentsReportTest(unittest.TestCase):
         self.assertNotIn("<b>🔁 Постоянные операции:</b>", text)
         self.assertIn("<b>📅 Платежей в ближайшие 10 дней нет</b>", text)
 
+
+    def test_project_dashboard_hides_global_upcoming_payments(self):
+        main_data = (
+            date(2026, 6, 29),
+            {"RUB": 115000},
+            {"RUB": 0},
+            [],
+            [],
+            [{"id": 2, "title": "Совком", "amount": 8200, "payment_date": date(2026, 6, 30)}],
+            [{"id": 1, "title": "Сбер кредит", "amount": 7900, "day_of_month": 4, "payment_date": date(2026, 7, 4)}],
+        )
+
+        with patch("services.reports._fetch_main_data", return_value=main_data) as fetch_main_data:
+            text = build_dashboard(person_id=7, person_name="Учеба")
+
+        fetch_main_data.assert_called_once_with(person_id=7)
+        self.assertIn("📁 <b>Учеба</b>", text)
+        self.assertIn("Фильтр: 📁 Учеба", text)
+        self.assertIn("💰 <b>Доходы:</b> <b>115 000 ₽</b>", text)
+        self.assertNotIn("Совком", text)
+        self.assertNotIn("Сбер кредит", text)
+
     def test_dashboard_shows_upcoming_payments_with_currency_symbol(self):
         main_data = (
             date(2026, 6, 17),
