@@ -180,18 +180,24 @@ def progress_after_operation(user_id: int | None, person_id: int | None = None) 
     return "\n".join(lines)
 
 
+def _paid_payment_dates(row) -> set[date]:
+    return {payment_date for payment_date in row.get("paid_payment_dates") or [] if payment_date}
+
+
 def _next_recurring_candidate(row, today: date) -> dict | None:
     day = row.get("day_of_month")
     if not day:
         return None
+    paid_payment_dates = _paid_payment_dates(row)
     year, month = today.year, today.month
     for _ in range(24):
         days_in_month = monthrange(year, month)[1]
         if day <= days_in_month:
             candidate = date(year, month, day)
-            if candidate >= today:
+            if candidate >= today and candidate not in paid_payment_dates:
                 item = dict(row)
                 item["payment_date"] = candidate
+                item.pop("paid_payment_dates", None)
                 return item
         month = 1 if month == 12 else month + 1
         year += 1 if month == 1 else 0
@@ -216,10 +222,25 @@ def fetch_next_payment():
         scheduled = cur.fetchone()
         cur.execute(
             """
-            SELECT id, title, amount, day_of_month
-            FROM recurring_operations
-            WHERE is_active=TRUE AND type IN ('payment','expense')
-            """
+            SELECT
+                ro.id,
+                ro.title,
+                ro.amount,
+                ro.day_of_month,
+                COALESCE(
+                    array_agg(l.payment_date ORDER BY l.payment_date)
+                        FILTER (WHERE l.payment_date IS NOT NULL),
+                    '{}'
+                ) AS paid_payment_dates
+            FROM recurring_operations ro
+            LEFT JOIN recurring_payments_log l
+                ON l.recurring_operation_id = ro.id
+               AND l.payment_date BETWEEN %s AND %s
+            WHERE ro.is_active=TRUE
+              AND ro.type IN ('payment','expense')
+            GROUP BY ro.id, ro.title, ro.amount, ro.day_of_month
+            """,
+            (today, horizon),
         )
         recurring = [_next_recurring_candidate(row, today) for row in cur.fetchall()]
         cur.close()
