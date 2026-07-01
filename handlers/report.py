@@ -154,6 +154,33 @@ async def report_month_callback(callback: CallbackQuery, state: FSMContext):
         )
 
 
+@router.callback_query(F.data.startswith("report_filter:"))
+async def report_filter_callback(callback: CallbackQuery, state: FSMContext):
+    try:
+        _, scope, raw_offset = callback.data.split(":", maxsplit=2)
+        month_offset = int(raw_offset)
+    except (AttributeError, ValueError):
+        await callback.answer("Не понял фильтр", show_alert=True)
+        return
+
+    tx_type = scope if scope in {"income", "expense"} else None
+    if tx_type is None:
+        await callback.answer("Не понял тип операций", show_alert=True)
+        return
+
+    person_id, person_name = await get_person_context(state)
+    await state.update_data(report_scope=scope, report_month_offset=month_offset)
+    report_date = _report_date_from_offset(month_offset)
+    transactions = fetch_month_transactions(report_date, tx_type=tx_type, person_id=person_id)
+    await callback.answer("Отчёт отфильтрован")
+    if callback.message:
+        await callback.message.edit_text(
+            build_summary_report(transactions=transactions, tx_type=tx_type, person_id=person_id, person_name=person_name, report_date=report_date),
+            reply_markup=report_transactions_kb(transactions, scope=scope, month_offset=month_offset),
+            parse_mode="HTML",
+        )
+
+
 @router.message(F.text == "📂 Категории")
 async def categories_report(message: Message, state: FSMContext):
     data = await state.get_data()

@@ -382,29 +382,31 @@ def report_transactions_kb(transactions, scope: str = "all", include_edit_button
             InlineKeyboardButton(text="⬅️ Прошлый месяц", callback_data=f"report_month:{scope}:{month_offset - 1}"),
             InlineKeyboardButton(text="Следующий месяц ➡️", callback_data=f"report_month:{scope}:{month_offset + 1}"),
         ])
+        rows.append([
+            InlineKeyboardButton(text="➕ Доход", callback_data=f"report_filter:income:{month_offset}"),
+            InlineKeyboardButton(text="➖ Расход", callback_data=f"report_filter:expense:{month_offset}"),
+        ])
     if include_edit_button:
         rows.append([InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"report_edit_recent:{scope}")])
-    for row in transactions:
-        sign = "+" if row["type"] == "income" else "-"
-        amount = f"{float(row['amount']):,.2f}".replace(",", " ")
-        if amount.endswith(".00"):
-            amount = amount[:-3]
-        category = row["category"] or "Без категории"
-        date_text = row["operation_date"].strftime("%d.%m")
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{date_text} {sign}{amount} {row.get('currency') or 'RUB'} — {category}",
-                    callback_data=f"report_tx:{row['id']}",
-                )
-            ]
-        )
-    edit_only = include_edit_button and month_offset is None and len(rows) == 1
-    nav_and_edit_only = include_edit_button and month_offset is not None and len(rows) == 2
+    if not include_edit_button:
+        for row in transactions:
+            sign = "+" if row["type"] == "income" else "-"
+            amount = f"{float(row['amount']):,.2f}".replace(",", " ")
+            if amount.endswith(".00"):
+                amount = amount[:-3]
+            category = row["category"] or "Без категории"
+            date_text = row["operation_date"].strftime("%d.%m")
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"{date_text} {sign}{amount} {row.get('currency') or 'RUB'} — {category}",
+                        callback_data=f"report_tx:{row['id']}",
+                    )
+                ]
+            )
+    edit_only = include_edit_button and month_offset is None and len(rows) == 1 and not transactions
     if not rows or edit_only:
         return None
-    if nav_and_edit_only:
-        return InlineKeyboardMarkup(inline_keyboard=[rows[0]])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
