@@ -80,6 +80,25 @@ class MonthlySummaryReportTest(unittest.TestCase):
         self.assertNotIn("Последние 10", text)
         self.assertIn("<b>20.05</b> <b>-300 ₽</b> — <b>Еда</b>", text)
 
+    def test_summary_report_hides_upcoming_payments_section(self):
+        main_data = (
+            date(2026, 6, 17),
+            {"RUB": 1000},
+            {"RUB": 300},
+            [],
+            [],
+            [{"id": 2, "title": "Разовый", "amount": 500, "payment_date": date(2026, 6, 20)}],
+            [{"id": 1, "title": "Кредит", "amount": 1000, "day_of_month": 18, "payment_date": date(2026, 6, 18)}],
+        )
+
+        with patch("services.reports._fetch_main_data", return_value=main_data):
+            text = build_summary_report(transactions=[])
+
+        self.assertNotIn("<b>📅 Ближайшие платежи на 10 дней:</b>", text)
+        self.assertNotIn("Нет платежей", text)
+        self.assertNotIn("Кредит", text)
+        self.assertNotIn("Разовый", text)
+
 
 class OverduePaymentsReportTest(unittest.TestCase):
     def test_summary_report_shows_overdue_payments(self):
