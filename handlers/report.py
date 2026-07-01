@@ -1,4 +1,5 @@
 import html
+from datetime import date
 from urllib.parse import unquote
 
 from aiogram import F, Router
@@ -29,6 +30,7 @@ from services.reports import (
     build_transactions_report,
     fetch_categories,
     fetch_category_transactions,
+    fetch_month_transactions,
     fetch_recent_transactions,
     money,
     money_currency,
@@ -59,6 +61,16 @@ EDIT_FIELD_STATES = {
 }
 
 
+def _add_months(value: date, months: int) -> date:
+    month_index = value.year * 12 + value.month - 1 + months
+    year, month_zero = divmod(month_index, 12)
+    return date(year, month_zero + 1, 1)
+
+
+def _report_date_from_offset(offset: int) -> date:
+    return _add_months(date.today().replace(day=1), offset)
+
+
 def _type_label(tx_type: str) -> str:
     return "доход" if tx_type == "income" else "расход"
 
@@ -83,16 +95,17 @@ def _parse_money(raw: str) -> float:
     return round(amount, 2)
 
 
-async def _send_report(message: Message, tx_type: str | None = None, state: FSMContext | None = None) -> None:
+async def _send_report(message: Message, tx_type: str | None = None, state: FSMContext | None = None, month_offset: int = 0) -> None:
     person_id = person_name = None
     if state is not None:
         person_id, person_name = await get_person_context(state)
-        await state.update_data(report_scope=tx_type or "all")
-    transactions = fetch_recent_transactions(tx_type=tx_type, person_id=person_id)
+        await state.update_data(report_scope=tx_type or "all", report_month_offset=month_offset)
+    report_date = _report_date_from_offset(month_offset)
+    transactions = fetch_month_transactions(report_date, tx_type=tx_type, person_id=person_id)
     await message.answer("<b>Меню отчёта:</b>", reply_markup=report_menu_kb(), parse_mode="HTML")
     await message.answer(
-        build_summary_report(transactions=transactions, tx_type=tx_type, person_id=person_id, person_name=person_name),
-        reply_markup=report_transactions_kb(transactions, scope=tx_type or "all"),
+        build_summary_report(transactions=transactions, tx_type=tx_type, person_id=person_id, person_name=person_name, report_date=report_date),
+        reply_markup=report_transactions_kb(transactions, scope=tx_type or "all", month_offset=month_offset),
         parse_mode="HTML",
     )
 
@@ -103,19 +116,42 @@ async def report(message: Message, state: FSMContext):
     scope = data.get("report_scope")
     tx_type = scope if scope in {"income", "expense"} else None
     await clear_work_data_keep_person(state)
-    await _send_report(message, tx_type=tx_type, state=state)
+    await _send_report(message, tx_type=tx_type, state=state, month_offset=0)
 
 
 @router.message(F.text == "📊 Отчёт по доходам")
 async def income_report(message: Message, state: FSMContext):
     await clear_work_data_keep_person(state)
-    await _send_report(message, tx_type="income", state=state)
+    await _send_report(message, tx_type="income", state=state, month_offset=0)
 
 
 @router.message(F.text == "📊 Отчёт по расходам")
 async def expense_report(message: Message, state: FSMContext):
     await clear_work_data_keep_person(state)
-    await _send_report(message, tx_type="expense", state=state)
+    await _send_report(message, tx_type="expense", state=state, month_offset=0)
+
+
+@router.callback_query(F.data.startswith("report_month:"))
+async def report_month_callback(callback: CallbackQuery, state: FSMContext):
+    try:
+        _, scope, raw_offset = callback.data.split(":", maxsplit=2)
+        month_offset = int(raw_offset)
+    except (AttributeError, ValueError):
+        await callback.answer("Не понял месяц", show_alert=True)
+        return
+
+    tx_type = scope if scope in {"income", "expense"} else None
+    person_id, person_name = await get_person_context(state)
+    await state.update_data(report_scope=scope, report_month_offset=month_offset)
+    report_date = _report_date_from_offset(month_offset)
+    transactions = fetch_month_transactions(report_date, tx_type=tx_type, person_id=person_id)
+    await callback.answer("Месяц переключён")
+    if callback.message:
+        await callback.message.edit_text(
+            build_summary_report(transactions=transactions, tx_type=tx_type, person_id=person_id, person_name=person_name, report_date=report_date),
+            reply_markup=report_transactions_kb(transactions, scope=scope, month_offset=month_offset),
+            parse_mode="HTML",
+        )
 
 
 @router.message(F.text == "📂 Категории")
@@ -176,8 +212,11 @@ async def report_edit_recent(callback: CallbackQuery, state: FSMContext):
     except (AttributeError, IndexError):
         scope = "all"
     tx_type = scope if scope in {"income", "expense"} else None
+    data = await state.get_data()
+    month_offset = int(data.get("report_month_offset", 0) or 0)
+    report_date = _report_date_from_offset(month_offset)
     person_id, _person_name = await get_person_context(state)
-    transactions = fetch_recent_transactions(tx_type=tx_type, person_id=person_id)
+    transactions = fetch_month_transactions(report_date, tx_type=tx_type, person_id=person_id)
 
     if not transactions:
         await callback.answer("Операций пока нет", show_alert=True)
@@ -186,7 +225,7 @@ async def report_edit_recent(callback: CallbackQuery, state: FSMContext):
     await callback.answer("Выберите операцию")
     if callback.message:
         await callback.message.answer(
-            "Выберите операцию из последних 10, чтобы отредактировать:",
+            "Выберите операцию за выбранный месяц, чтобы отредактировать:",
             reply_markup=report_transactions_kb(transactions, scope=scope, include_edit_button=False),
         )
 

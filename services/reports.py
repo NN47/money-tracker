@@ -140,8 +140,8 @@ def _person_title(person_name: str | None) -> list[str]:
     return [f"📁 <b>{html.escape(person_name)}</b>", "", f"Фильтр: 📁 {html.escape(person_name)}", ""] if person_name else []
 
 
-def _fetch_main_data(person_id: int | None = None):
-    today = moscow_today()
+def _fetch_main_data(person_id: int | None = None, report_date: date | None = None):
+    today = report_date or moscow_today()
     start, nxt = month_bounds(today)
     horizon = today + timedelta(days=UPCOMING_PAYMENTS_DAYS)
     with get_connection() as conn:
@@ -250,6 +250,34 @@ def fetch_recent_transactions(limit: int = 10, tx_type: str | None = None, perso
     return tx
 
 
+
+def fetch_month_transactions(report_date: date, tx_type: str | None = None, person_id: int | None = None):
+    start, nxt = month_bounds(report_date)
+    with get_connection() as conn:
+        cur = dict_cursor(conn)
+        params: list = [start, nxt]
+        where = ["operation_date >= %s", "operation_date < %s"]
+        if tx_type:
+            where.append("type = %s")
+            params.append(tx_type)
+        if person_id is not None:
+            where.append("person_id = %s")
+            params.append(person_id)
+        else:
+            where.append("(person_id IS NULL OR EXISTS (SELECT 1 FROM persons p WHERE p.id = transactions.person_id AND p.include_in_budget = TRUE))")
+        cur.execute(
+            f"""
+            SELECT id, type, amount, COALESCE(currency, 'RUB') currency, category, comment, operation_date
+            FROM transactions
+            WHERE {" AND ".join(where)}
+            ORDER BY operation_date DESC, id DESC
+            """,
+            params,
+        )
+        tx = cur.fetchall()
+        cur.close()
+    return tx
+
 def _format_transaction_line(row, start: date, end: date) -> str:
     sign = "+" if row["type"] == "income" else "-"
     tx_date = _format_transaction_date(row["operation_date"], start, end)
@@ -258,19 +286,19 @@ def _format_transaction_line(row, start: date, end: date) -> str:
     return f"<b>{tx_date}</b> <b>{sign}{money_currency(float(row['amount']), row.get('currency'))}</b> — <b>{category}</b>{comment}"
 
 
-def build_summary_report(transactions=None, tx_type: str | None = None, person_id: int | None = None, person_name: str | None = None) -> str:
-    today, income, expense, overdue_payments, overdue_recurring, payments, recurring = _fetch_main_data(person_id=person_id)
+def build_summary_report(transactions=None, tx_type: str | None = None, person_id: int | None = None, person_name: str | None = None, report_date: date | None = None) -> str:
+    today, income, expense, overdue_payments, overdue_recurring, payments, recurring = _fetch_main_data(person_id=person_id, report_date=report_date)
     balance = _subtract_totals(income, expense)
-    tx = fetch_recent_transactions(tx_type=tx_type, person_id=person_id) if transactions is None else transactions
+    tx = fetch_month_transactions(today, tx_type=tx_type, person_id=person_id) if transactions is None else transactions
     start, nxt = month_bounds(today)
     if tx_type == "income":
         title = "📊 <b>Отчёт по доходам</b>"
         total_lines = [f"💰 <b>Доходы:</b> <b>{_format_totals(income)}</b>"]
-        recent_title = "<b>💵 Последние 10 доходов:</b>"
+        recent_title = "<b>💵 Доходы за месяц:</b>"
     elif tx_type == "expense":
         title = "📊 <b>Отчёт по расходам</b>"
         total_lines = [f"💸 <b>Расходы:</b> <b>{_format_totals(expense)}</b>"]
-        recent_title = "<b>🧾 Последние 10 расходов:</b>"
+        recent_title = "<b>🧾 Расходы за месяц:</b>"
     else:
         title = "📊 <b>Отчёт</b>"
         total_lines = [
@@ -278,7 +306,7 @@ def build_summary_report(transactions=None, tx_type: str | None = None, person_i
             f"💸 <b>Расходы:</b> <b>{_format_totals(expense)}</b>",
             f"⚖️ <b>Баланс:</b> <b>{_format_totals(balance)}</b>",
         ]
-        recent_title = "<b>🧾 Последние 10 операций:</b>"
+        recent_title = "<b>🧾 Операции за месяц:</b>"
     lines = [*_person_title(person_name), title, "", f"🗓 <b>Период:</b> <b>{format_russian_month_year(today)}</b>", *total_lines, "", recent_title]
     if tx:
         for row in tx:

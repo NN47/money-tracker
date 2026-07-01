@@ -148,6 +148,15 @@ class ReportKeyboardTest(unittest.TestCase):
     def test_report_transactions_keyboard_is_empty_without_transactions(self):
         self.assertIsNone(report_transactions_kb([]))
 
+    def test_report_transactions_keyboard_adds_month_navigation(self):
+        keyboard = report_transactions_kb([], scope="all", month_offset=-1)
+
+        self.assertEqual(keyboard.inline_keyboard[0][0].text, "⬅️ Прошлый месяц")
+        self.assertEqual(keyboard.inline_keyboard[0][0].callback_data, "report_month:all:-2")
+        self.assertEqual(keyboard.inline_keyboard[0][1].text, "Следующий месяц ➡️")
+        self.assertEqual(keyboard.inline_keyboard[0][1].callback_data, "report_month:all:0")
+        self.assertEqual(len(keyboard.inline_keyboard), 1)
+
 
 class RecurringPaymentsKeyboardTest(unittest.TestCase):
     def test_recurring_day_choice_keyboard_is_compact_day_picker(self):

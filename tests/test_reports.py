@@ -57,6 +57,30 @@ class UpcomingRecurringPaymentsTest(unittest.TestCase):
         self.assertNotIn("paid_payment_dates", result[0])
 
 
+class MonthlySummaryReportTest(unittest.TestCase):
+    def test_summary_report_labels_operations_for_month(self):
+        main_data = (date(2026, 5, 1), {"RUB": 1000}, {"RUB": 300}, [], [], [], [])
+        transactions = [
+            {
+                "id": 1,
+                "type": "expense",
+                "amount": 300,
+                "currency": "RUB",
+                "category": "Еда",
+                "comment": "",
+                "operation_date": date(2026, 5, 20),
+            }
+        ]
+
+        with patch("services.reports._fetch_main_data", return_value=main_data):
+            text = build_summary_report(transactions=transactions, report_date=date(2026, 5, 1))
+
+        self.assertIn("🗓 <b>Период:</b> <b>Май 2026</b>", text)
+        self.assertIn("<b>🧾 Операции за месяц:</b>", text)
+        self.assertNotIn("Последние 10", text)
+        self.assertIn("<b>20.05</b> <b>-300 ₽</b> — <b>Еда</b>", text)
+
+
 class OverduePaymentsReportTest(unittest.TestCase):
     def test_summary_report_shows_overdue_payments(self):
         main_data = (
