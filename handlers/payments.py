@@ -21,6 +21,8 @@ from keyboards.main import (
     dashboard_actions_kb,
     main_menu_kb,
     payment_done_kb,
+    recurring_advance_confirm_kb,
+    recurring_advance_payments_kb,
     recurring_delete_confirm_kb,
     recurring_due_kb,
     recurring_edit_fields_kb,
@@ -41,6 +43,7 @@ from services.recurring_payments import (
     deactivate_recurring_operation,
     fetch_active_recurring_operation,
     fetch_all_active_recurring_operations,
+    fetch_future_recurring_payments,
     fetch_unpaid_due_recurring_payments,
     mark_recurring_payment_paid,
     mark_scheduled_payment_paid,
@@ -63,7 +66,6 @@ OWNER_TELEGRAM_ID: int | None = None
 def configure_owner(owner_telegram_id: int | None) -> None:
     global OWNER_TELEGRAM_ID
     OWNER_TELEGRAM_ID = owner_telegram_id
-
 
 
 class ScheduledPaymentStates(StatesGroup):
@@ -90,14 +92,22 @@ class RecurringEditStates(StatesGroup):
     waiting_comment = State()
 
 
-async def send_callback_message(callback: CallbackQuery, text: str, reply_markup=None, parse_mode: str | None = None) -> None:
+async def send_callback_message(
+    callback: CallbackQuery, text: str, reply_markup=None, parse_mode: str | None = None
+) -> None:
     if callback.message:
         try:
-            await callback.message.answer(text, reply_markup=reply_markup, parse_mode=parse_mode)
+            await callback.message.answer(
+                text, reply_markup=reply_markup, parse_mode=parse_mode
+            )
             return
         except Exception:
-            logger.exception("Failed to send callback reply in chat; falling back to private message")
-    await callback.bot.send_message(callback.from_user.id, text, reply_markup=reply_markup, parse_mode=parse_mode)
+            logger.exception(
+                "Failed to send callback reply in chat; falling back to private message"
+            )
+    await callback.bot.send_message(
+        callback.from_user.id, text, reply_markup=reply_markup, parse_mode=parse_mode
+    )
 
 
 async def remove_inline_keyboard(callback: CallbackQuery) -> None:
@@ -106,7 +116,9 @@ async def remove_inline_keyboard(callback: CallbackQuery) -> None:
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
     except Exception:
-        logger.exception("Failed to remove inline keyboard after callback %s", callback.data)
+        logger.exception(
+            "Failed to remove inline keyboard after callback %s", callback.data
+        )
 
 
 def parse_money(raw: str) -> float:
@@ -131,7 +143,11 @@ def build_dashboard_reply_markup(scheduled_payments=None, unpaid_operations=None
 
 async def _back_to_home(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer(build_dashboard(), reply_markup=build_dashboard_reply_markup(), parse_mode="HTML")
+    await message.answer(
+        build_dashboard(),
+        reply_markup=build_dashboard_reply_markup(),
+        parse_mode="HTML",
+    )
     await message.answer("Главное меню:", reply_markup=main_menu_kb())
 
 
@@ -142,6 +158,7 @@ def calendar_events_kb(year: int, month: int, person_id: int | None = None):
 
 def recurring_kind_for_type(op_type: str | None) -> str:
     return "income" if op_type == "income" else "payment"
+
 
 def build_recurring_operation_details(operation) -> str:
     type_labels = {
@@ -178,6 +195,7 @@ def build_recurring_operation_details(operation) -> str:
         ]
     )
 
+
 def build_recurring_operations_section(operations, kind: str = "payment") -> str:
     if not operations:
         if kind == "income":
@@ -202,32 +220,50 @@ def build_recurring_operations_section(operations, kind: str = "payment") -> str
     return "\n".join(lines)
 
 
-async def send_recurring_operations_section(message: Message, kind: str = "payment") -> None:
+async def send_recurring_operations_section(
+    message: Message, kind: str = "payment"
+) -> None:
     operations = fetch_all_active_recurring_operations()
     if kind == "income":
         operations = [row for row in operations if row["type"] == "income"]
     else:
-        operations = [row for row in operations if row["type"] in {"expense", "payment"}]
+        operations = [
+            row for row in operations if row["type"] in {"expense", "payment"}
+        ]
     await message.answer(
         build_recurring_operations_section(operations, kind=kind),
-        reply_markup=recurring_payments_actions_kb(operations),
+        reply_markup=recurring_payments_actions_kb(
+            operations, include_advance_payment=(kind == "payment")
+        ),
     )
-    menu_title = "Меню регулярных доходов:" if kind == "income" else "Меню регулярных платежей:"
+    menu_title = (
+        "Меню регулярных доходов:" if kind == "income" else "Меню регулярных платежей:"
+    )
     await message.answer(menu_title, reply_markup=recurring_payments_menu_kb(kind))
 
 
 def build_recurring_payment_notification(operations) -> str:
     today = moscow_today()
-    has_overdue = any(row.get("payment_date") and row["payment_date"] < today for row in operations)
+    has_overdue = any(
+        row.get("payment_date") and row["payment_date"] < today for row in operations
+    )
     lines = ["🔥 Вы не оплатили:" if has_overdue else "🔥 Сегодня к оплате:"]
     for row in operations:
         payment_date = row.get("payment_date")
-        date_label = f" за {payment_date.strftime('%d.%m.%Y')}" if payment_date and payment_date < today else ""
-        lines.append(f"• {row['title']}{date_label} — {money_currency(float(row['amount']))}")
+        date_label = (
+            f" за {payment_date.strftime('%d.%m.%Y')}"
+            if payment_date and payment_date < today
+            else ""
+        )
+        lines.append(
+            f"• {row['title']}{date_label} — {money_currency(float(row['amount']))}"
+        )
     return "\n".join(lines)
 
 
-async def send_recurring_payment_notification(bot: Bot, chat_id: int, operation_ids: list[int] | None = None) -> None:
+async def send_recurring_payment_notification(
+    bot: Bot, chat_id: int, operation_ids: list[int] | None = None
+) -> None:
     operations = fetch_unpaid_due_recurring_payments()
     if operation_ids is not None:
         allowed_ids = set(operation_ids)
@@ -241,7 +277,9 @@ async def send_recurring_payment_notification(bot: Bot, chat_id: int, operation_
     )
 
 
-async def remind_later(bot: Bot, chat_id: int, operation_id: int, delay_seconds: int = 3600) -> None:
+async def remind_later(
+    bot: Bot, chat_id: int, operation_id: int, delay_seconds: int = 3600
+) -> None:
     await asyncio.sleep(delay_seconds)
     await send_recurring_payment_notification(bot, chat_id, [operation_id])
 
@@ -308,7 +346,10 @@ async def calendar_events_start(message: Message, state: FSMContext):
         f"📅 Календарь событий. 🟢 — доходы, 🔴 — расходы, 📍 — сегодня. Выберите дату, чтобы посмотреть детали.{chr(10) + chr(10) + 'Фильтр: 📁 ' + person_name if person_name else ''}",
         reply_markup=calendar_back_kb(),
     )
-    await message.answer("Календарь:", reply_markup=calendar_events_kb(today.year, today.month, person_id=person_id))
+    await message.answer(
+        "Календарь:",
+        reply_markup=calendar_events_kb(today.year, today.month, person_id=person_id),
+    )
 
 
 @router.callback_query(F.data.startswith("cal:events:"))
@@ -329,7 +370,11 @@ async def calendar_events(callback: CallbackQuery, state: FSMContext):
 
     if action == "month":
         if callback.message:
-            await callback.message.edit_reply_markup(reply_markup=calendar_events_kb(year, month, person_id=(await get_person_context(state))[0]))
+            await callback.message.edit_reply_markup(
+                reply_markup=calendar_events_kb(
+                    year, month, person_id=(await get_person_context(state))[0]
+                )
+            )
         await callback.answer()
         return
 
@@ -345,7 +390,11 @@ async def calendar_events(callback: CallbackQuery, state: FSMContext):
 
     person_id, _person_name = await get_person_context(state)
     events = fetch_calendar_day_events(selected_date, person_id=person_id)
-    await send_callback_message(callback, build_calendar_day_events(selected_date, events), reply_markup=calendar_back_kb())
+    await send_callback_message(
+        callback,
+        build_calendar_day_events(selected_date, events),
+        reply_markup=calendar_back_kb(),
+    )
     await callback.answer("События загружены")
 
 
@@ -381,7 +430,9 @@ async def payment_amount(message: Message, state: FSMContext):
         "Выберите дату платежа в календаре или введите вручную: завтра, через 10 дней, 10.06 или 10.06.2026",
         reply_markup=calendar_back_kb(),
     )
-    await message.answer("Календарь платежей:", reply_markup=calendar_kb("pay", today.year, today.month))
+    await message.answer(
+        "Календарь платежей:", reply_markup=calendar_kb("pay", today.year, today.month)
+    )
 
 
 @router.callback_query(F.data.startswith("cal:pay:"))
@@ -402,7 +453,9 @@ async def payment_calendar(callback: CallbackQuery, state: FSMContext):
 
     if action == "month":
         if callback.message:
-            await callback.message.edit_reply_markup(reply_markup=calendar_kb("pay", year, month))
+            await callback.message.edit_reply_markup(
+                reply_markup=calendar_kb("pay", year, month)
+            )
         await callback.answer()
         return
 
@@ -432,11 +485,15 @@ async def payment_date(message: Message, state: FSMContext):
     try:
         payment_date = parse_flexible_date(message.text)
     except ValueError:
-        await message.answer("Не понял дату. Можно так: завтра, через 10 дней, 10.06 или 10.06.2026")
+        await message.answer(
+            "Не понял дату. Можно так: завтра, через 10 дней, 10.06 или 10.06.2026"
+        )
         return
     await state.update_data(payment_date=payment_date.isoformat())
     await state.set_state(ScheduledPaymentStates.waiting_comment)
-    await message.answer("Введите комментарий или нажмите «Пропустить».", reply_markup=skip_comment_kb())
+    await message.answer(
+        "Введите комментарий или нажмите «Пропустить».", reply_markup=skip_comment_kb()
+    )
 
 
 @router.message(ScheduledPaymentStates.waiting_comment)
@@ -454,6 +511,110 @@ async def payment_comment(message: Message, state: FSMContext):
     await _back_to_home(message, state)
 
 
+@router.message(F.text == "💸 Оплатить платёж заранее")
+async def recurring_advance_payment_start(message: Message):
+    operations = await asyncio.to_thread(fetch_future_recurring_payments)
+    if not operations:
+        await message.answer(
+            "Будущих регулярных платежей для досрочной оплаты пока нет.",
+            reply_markup=recurring_payments_menu_kb("payment"),
+        )
+        return
+    await message.answer(
+        "Выберите будущий платёж, который оплатили заранее:",
+        reply_markup=recurring_advance_payments_kb(operations),
+    )
+
+
+@router.callback_query(F.data == "advance_recurring:list")
+async def recurring_advance_payment_list(callback: CallbackQuery):
+    operations = await asyncio.to_thread(fetch_future_recurring_payments)
+    if not operations:
+        await callback.answer("Будущих платежей нет", show_alert=True)
+        return
+    await callback.answer()
+    await send_callback_message(
+        callback,
+        "Выберите будущий платёж, который оплатили заранее:",
+        reply_markup=recurring_advance_payments_kb(operations),
+    )
+
+
+@router.callback_query(F.data.startswith("advance_recurring:select:"))
+async def recurring_advance_payment_select(callback: CallbackQuery):
+    try:
+        _, _, _, operation_id_raw, payment_date_raw = callback.data.split(":")
+        operation_id = int(operation_id_raw)
+        payment_date = date.fromisoformat(payment_date_raw)
+    except (ValueError, IndexError):
+        await callback.answer("Не понял, какой платёж выбрать", show_alert=True)
+        return
+
+    operation = await asyncio.to_thread(fetch_active_recurring_operation, operation_id)
+    if not operation:
+        await callback.answer("Этот платёж не найден или отключён", show_alert=True)
+        return
+
+    await callback.answer()
+    await send_callback_message(
+        callback,
+        f"Вы оплатили платёж «{operation['title']}» за {payment_date.strftime('%d.%m.%Y')}?",
+        reply_markup=recurring_advance_confirm_kb(operation_id, payment_date),
+    )
+
+
+@router.callback_query(F.data.startswith("advance_recurring:confirm:"))
+async def recurring_advance_payment_confirm(callback: CallbackQuery):
+    try:
+        _, _, _, operation_id_raw, payment_date_raw = callback.data.split(":")
+        operation_id = int(operation_id_raw)
+        payment_date = date.fromisoformat(payment_date_raw)
+    except (ValueError, IndexError):
+        await callback.answer("Не понял, какой платёж отметить", show_alert=True)
+        return
+
+    await callback.answer("Отмечаю платёж…")
+    try:
+        result = await asyncio.to_thread(
+            mark_recurring_payment_paid, operation_id, payment_date
+        )
+    except Exception:
+        logger.exception(
+            "Failed to mark advance recurring operation %s as paid", operation_id
+        )
+        await send_callback_message(
+            callback, "Не получилось записать платёж в расходы. Попробуйте ещё раз."
+        )
+        return
+
+    if result["status"] == "paid":
+        await remove_inline_keyboard(callback)
+        await send_callback_message(
+            callback,
+            f"✅ Вы оплатили платёж «{result['title']}». Он отмечен выплаченным.",
+            reply_markup=main_menu_kb(),
+        )
+        return
+    if result["status"] == "already_paid":
+        await remove_inline_keyboard(callback)
+        await send_callback_message(
+            callback, "Этот платёж уже учтён ✅", reply_markup=main_menu_kb()
+        )
+        return
+    await send_callback_message(callback, "Этот платёж не найден или отключён.")
+
+
+@router.callback_query(F.data == "advance_recurring:cancel")
+async def recurring_advance_payment_cancel(callback: CallbackQuery):
+    await callback.answer("Отменено")
+    await remove_inline_keyboard(callback)
+    await send_callback_message(
+        callback,
+        "Не отмечаю платёж выплаченным.",
+        reply_markup=recurring_payments_menu_kb("payment"),
+    )
+
+
 @router.callback_query(F.data.startswith("pay_done:"))
 async def payment_mark_done(callback: CallbackQuery):
     try:
@@ -468,7 +629,10 @@ async def payment_mark_done(callback: CallbackQuery):
         result = await asyncio.to_thread(mark_scheduled_payment_paid, payment_id)
     except Exception:
         logger.exception("Failed to mark scheduled payment %s as paid", payment_id)
-        await send_callback_message(callback, "Не получилось отметить платёж и записать расход. Попробуйте ещё раз.")
+        await send_callback_message(
+            callback,
+            "Не получилось отметить платёж и записать расход. Попробуйте ещё раз.",
+        )
         return
 
     if result["status"] != "paid":
@@ -477,7 +641,9 @@ async def payment_mark_done(callback: CallbackQuery):
 
     await remove_inline_keyboard(callback)
     user_id = callback.from_user.id if callback.from_user else None
-    text = PROGRESS_TEXTS["payment_done"].format(days_text=days_until_next_payment_text())
+    text = PROGRESS_TEXTS["payment_done"].format(
+        days_text=days_until_next_payment_text()
+    )
     await send_callback_message(
         callback,
         f"{text}\n\n{progress_after_operation(user_id)}",
@@ -498,10 +664,14 @@ async def recurring_payment_mark_paid(callback: CallbackQuery):
     await callback.answer("Записываю платёж…")
 
     try:
-        result = await asyncio.to_thread(mark_recurring_payment_paid, operation_id, payment_date)
+        result = await asyncio.to_thread(
+            mark_recurring_payment_paid, operation_id, payment_date
+        )
     except Exception:
         logger.exception("Failed to mark recurring operation %s as paid", operation_id)
-        await send_callback_message(callback, "Не получилось записать платёж в расходы. Попробуйте ещё раз.")
+        await send_callback_message(
+            callback, "Не получилось записать платёж в расходы. Попробуйте ещё раз."
+        )
         return
 
     status = result["status"]
@@ -515,7 +685,9 @@ async def recurring_payment_mark_paid(callback: CallbackQuery):
             asyncio.to_thread(build_dashboard),
         )
         user_id = callback.from_user.id if callback.from_user else None
-        text = PROGRESS_TEXTS["payment_done"].format(days_text=days_until_next_payment_text())
+        text = PROGRESS_TEXTS["payment_done"].format(
+            days_text=days_until_next_payment_text()
+        )
         await send_callback_message(
             callback,
             f"{text}\n\n{progress_after_operation(user_id)}",
@@ -524,7 +696,9 @@ async def recurring_payment_mark_paid(callback: CallbackQuery):
         await send_callback_message(
             callback,
             dashboard,
-            reply_markup=build_dashboard_reply_markup(scheduled_payments, unpaid_operations),
+            reply_markup=build_dashboard_reply_markup(
+                scheduled_payments, unpaid_operations
+            ),
             parse_mode="HTML",
         )
         return
@@ -536,11 +710,15 @@ async def recurring_payment_mark_paid(callback: CallbackQuery):
             asyncio.to_thread(fetch_unpaid_due_recurring_payments),
             asyncio.to_thread(build_dashboard),
         )
-        await send_callback_message(callback, "Этот платёж уже учтён ✅", reply_markup=main_menu_kb())
+        await send_callback_message(
+            callback, "Этот платёж уже учтён ✅", reply_markup=main_menu_kb()
+        )
         await send_callback_message(
             callback,
             dashboard,
-            reply_markup=build_dashboard_reply_markup(scheduled_payments, unpaid_operations),
+            reply_markup=build_dashboard_reply_markup(
+                scheduled_payments, unpaid_operations
+            ),
             parse_mode="HTML",
         )
         return
@@ -623,7 +801,9 @@ def _update_recurring_field(operation_id: int, field: str, value) -> bool:
     else:
         return False
 
-    return update_recurring_operation(operation_id, title, op_type, amount, category, day_of_month, comment)
+    return update_recurring_operation(
+        operation_id, title, op_type, amount, category, day_of_month, comment
+    )
 
 
 @router.callback_query(F.data.startswith("edit_recurring_field:"))
@@ -644,7 +824,10 @@ async def recurring_edit_field(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Выберите тип")
         if callback.message:
             await callback.message.edit_reply_markup(reply_markup=None)
-            await callback.message.answer("Выберите новый тип операции:", reply_markup=recurring_type_edit_kb(operation_id))
+            await callback.message.answer(
+                "Выберите новый тип операции:",
+                reply_markup=recurring_type_edit_kb(operation_id),
+            )
         return
 
     if field not in RECURRING_EDIT_FIELD_STATES:
@@ -681,10 +864,14 @@ async def recurring_edit_type(callback: CallbackQuery):
     if callback.message:
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer("Изменения сохранены ✅")
-        await send_recurring_operations_section(callback.message, kind=recurring_kind_for_type(op_type))
+        await send_recurring_operations_section(
+            callback.message, kind=recurring_kind_for_type(op_type)
+        )
 
 
-async def _save_recurring_edited_field(message: Message, state: FSMContext, field: str, value) -> None:
+async def _save_recurring_edited_field(
+    message: Message, state: FSMContext, field: str, value
+) -> None:
     data = await state.get_data()
     operation_id = data.get("edit_operation_id")
     operation_kind = "payment"
@@ -692,7 +879,9 @@ async def _save_recurring_edited_field(message: Message, state: FSMContext, fiel
         await message.answer("Этот платёж не найден или уже удалён.")
     else:
         updated_operation = fetch_active_recurring_operation(operation_id)
-        operation_kind = recurring_kind_for_type(updated_operation["type"] if updated_operation else None)
+        operation_kind = recurring_kind_for_type(
+            updated_operation["type"] if updated_operation else None
+        )
         await message.answer("Изменения сохранены ✅")
     await state.clear()
     await send_recurring_operations_section(message, kind=operation_kind)
@@ -772,7 +961,9 @@ async def recurring_delete_ask_confirmation(callback: CallbackQuery):
 async def recurring_delete_cancel(callback: CallbackQuery):
     await callback.answer("Удаление отменено")
     await remove_inline_keyboard(callback)
-    await send_callback_message(callback, "Удаление отменено.", reply_markup=main_menu_kb())
+    await send_callback_message(
+        callback, "Удаление отменено.", reply_markup=main_menu_kb()
+    )
 
 
 @router.callback_query(F.data.startswith("confirm_delete_recurring:"))
@@ -787,17 +978,27 @@ async def recurring_delete_confirm(callback: CallbackQuery):
         deleted = deactivate_recurring_operation(operation_id)
     except Exception:
         logger.exception("Failed to delete recurring operation %s", operation_id)
-        await send_callback_message(callback, "Не получилось удалить платёж. Попробуйте ещё раз.")
+        await send_callback_message(
+            callback, "Не получилось удалить платёж. Попробуйте ещё раз."
+        )
         return
 
     await remove_inline_keyboard(callback)
     if not deleted:
         await callback.answer("Платёж не найден", show_alert=True)
-        await send_callback_message(callback, "Этот платёж не найден или уже удалён.", reply_markup=main_menu_kb())
+        await send_callback_message(
+            callback,
+            "Этот платёж не найден или уже удалён.",
+            reply_markup=main_menu_kb(),
+        )
         return
 
     await callback.answer("Удалено")
-    await send_callback_message(callback, f"Регулярный платёж «{deleted['title']}» удалён 🗑", reply_markup=main_menu_kb())
+    await send_callback_message(
+        callback,
+        f"Регулярный платёж «{deleted['title']}» удалён 🗑",
+        reply_markup=main_menu_kb(),
+    )
     operations = fetch_all_active_recurring_operations()
     await send_callback_message(
         callback,
@@ -878,18 +1079,26 @@ async def recurring_day_button(callback: CallbackQuery, state: FSMContext):
     try:
         day = int(callback.data.split(":", maxsplit=1)[1])
     except (ValueError, IndexError):
-        await callback.answer("Введите число от 1 до 31 или выберите день кнопкой.", show_alert=True)
+        await callback.answer(
+            "Введите число от 1 до 31 или выберите день кнопкой.", show_alert=True
+        )
         return
 
     if day < 1 or day > 31:
-        await callback.answer("Введите число от 1 до 31 или выберите день кнопкой.", show_alert=True)
+        await callback.answer(
+            "Введите число от 1 до 31 или выберите день кнопкой.", show_alert=True
+        )
         return
 
     await state.update_data(day_of_month=day)
     await state.set_state(RecurringStates.waiting_category)
     if callback.message:
         await callback.message.edit_reply_markup(reply_markup=None)
-        await _ask_recurring_category(callback.message, state, f"День платежа: {day}. Выберите категорию кнопкой или введите новую текстом:")
+        await _ask_recurring_category(
+            callback.message,
+            state,
+            f"День платежа: {day}. Выберите категорию кнопкой или введите новую текстом:",
+        )
     await callback.answer("День выбран")
 
 
@@ -916,19 +1125,31 @@ async def recurring_day(message: Message, state: FSMContext):
     await _ask_recurring_category(message, state)
 
 
-async def _ask_recurring_category(message: Message, state: FSMContext, prompt: str = "Выберите категорию кнопкой или введите новую текстом:"):
+async def _ask_recurring_category(
+    message: Message,
+    state: FSMContext,
+    prompt: str = "Выберите категорию кнопкой или введите новую текстом:",
+):
     data = await state.get_data()
     category_type = "income" if data.get("type") == "income" else "expense"
     categories = [row["category"] for row in fetch_categories(tx_type=category_type)]
-    extra_rows = [[KeyboardButton(text=CREDIT_CARD_EXPENSE_TEXT)]] if category_type == "expense" else None
-    await message.answer(prompt, reply_markup=category_choice_kb(categories, extra_rows=extra_rows))
+    extra_rows = (
+        [[KeyboardButton(text=CREDIT_CARD_EXPENSE_TEXT)]]
+        if category_type == "expense"
+        else None
+    )
+    await message.answer(
+        prompt, reply_markup=category_choice_kb(categories, extra_rows=extra_rows)
+    )
 
 
 @router.message(RecurringStates.waiting_category)
 async def recurring_category(message: Message, state: FSMContext):
     category = message.text.strip()
     if category == CREDIT_CARD_EXPENSE_TEXT:
-        await message.answer("Раздел расходов по кредитной карте пока в разработке. Выберите другую категорию или введите новую.")
+        await message.answer(
+            "Раздел расходов по кредитной карте пока в разработке. Выберите другую категорию или введите новую."
+        )
         return
     if category == "✏️ Новая категория":
         await message.answer("Введите новую категорию:", reply_markup=cancel_kb())
@@ -938,7 +1159,9 @@ async def recurring_category(message: Message, state: FSMContext):
         return
     await state.update_data(category=category)
     await state.set_state(RecurringStates.waiting_comment)
-    await message.answer("Введите комментарий или «Пропустить».", reply_markup=skip_comment_kb())
+    await message.answer(
+        "Введите комментарий или «Пропустить».", reply_markup=skip_comment_kb()
+    )
 
 
 @router.message(RecurringStates.waiting_comment)
@@ -969,20 +1192,31 @@ async def recurring_comment(message: Message, state: FSMContext):
                 INSERT INTO recurring_operations(title, type, amount, category, day_of_month, frequency, comment)
                 VALUES(%s, %s, %s, %s, %s, 'monthly', %s)
                 """,
-                (data["title"], data["type"], data["amount"], data["category"], data["day_of_month"], comment),
+                (
+                    data["title"],
+                    data["type"],
+                    data["amount"],
+                    data["category"],
+                    data["day_of_month"],
+                    comment,
+                ),
             )
             cur.close()
         await message.answer("Сохранено ✅")
 
     await state.clear()
-    await send_recurring_operations_section(message, kind=recurring_kind_for_type(data.get("type")))
+    await send_recurring_operations_section(
+        message, kind=recurring_kind_for_type(data.get("type"))
+    )
 
 
 @router.message(F.text == "📅 Ближайшие платежи")
 async def list_payments(message: Message):
     with get_connection() as conn:
         cur = dict_cursor(conn)
-        cur.execute("SELECT id, title, amount, payment_date FROM scheduled_payments WHERE is_paid = FALSE ORDER BY payment_date ASC LIMIT 10")
+        cur.execute(
+            "SELECT id, title, amount, payment_date FROM scheduled_payments WHERE is_paid = FALSE ORDER BY payment_date ASC LIMIT 10"
+        )
         rows = cur.fetchall()
         cur.close()
     if not rows:
@@ -990,4 +1224,4 @@ async def list_payments(message: Message):
         return
     for row in rows:
         txt = f"{row['payment_date'].strftime('%d.%m')} — {row['title']} — {money_currency(float(row['amount']))}"
-        await message.answer(txt, reply_markup=payment_done_kb(row['id']))
+        await message.answer(txt, reply_markup=payment_done_kb(row["id"]))

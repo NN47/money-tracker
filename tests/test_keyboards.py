@@ -11,6 +11,8 @@ from keyboards.main import (
     calendar_kb,
     recurring_day_choice_kb,
     category_choice_kb,
+    recurring_advance_confirm_kb,
+    recurring_advance_payments_kb,
     recurring_due_kb,
     recurring_edit_fields_kb,
     recurring_payments_actions_kb,
@@ -48,7 +50,9 @@ class CalendarKeyboardTest(unittest.TestCase):
 
     def test_calendar_inline_keyboard_has_navigation_without_close_button(self):
         keyboard = calendar_kb("tx", 2026, 6)
-        button_texts = [button.text for row in keyboard.inline_keyboard for button in row]
+        button_texts = [
+            button.text for row in keyboard.inline_keyboard for button in row
+        ]
 
         self.assertIn("⬅️ Пред.", button_texts)
         self.assertIn("След. ➡️", button_texts)
@@ -56,14 +60,20 @@ class CalendarKeyboardTest(unittest.TestCase):
 
     def test_calendar_inline_keyboard_marks_event_days(self):
         keyboard = calendar_kb("events", 2026, 6, marked_days={12})
-        button_texts = [button.text for row in keyboard.inline_keyboard for button in row]
+        button_texts = [
+            button.text for row in keyboard.inline_keyboard for button in row
+        ]
 
         self.assertIn("12 •", button_texts)
         self.assertNotIn("12", button_texts)
 
     def test_calendar_inline_keyboard_marks_income_and_expense_days(self):
-        keyboard = calendar_kb("events", 2026, 6, marked_days={10: "🟢", 12: "🔴", 15: "🟢🔴"})
-        button_texts = [button.text for row in keyboard.inline_keyboard for button in row]
+        keyboard = calendar_kb(
+            "events", 2026, 6, marked_days={10: "🟢", 12: "🔴", 15: "🟢🔴"}
+        )
+        button_texts = [
+            button.text for row in keyboard.inline_keyboard for button in row
+        ]
 
         self.assertIn("10 🟢", button_texts)
         self.assertIn("12 🔴", button_texts)
@@ -71,7 +81,9 @@ class CalendarKeyboardTest(unittest.TestCase):
 
     def test_calendar_inline_keyboard_omits_trailing_empty_cells(self):
         keyboard = calendar_kb("events", 2026, 6)
-        june_29_row = next(row for row in keyboard.inline_keyboard if row[0].text == "29")
+        june_29_row = next(
+            row for row in keyboard.inline_keyboard if row[0].text == "29"
+        )
 
         self.assertEqual([button.text for button in june_29_row], ["29", "30"])
 
@@ -102,12 +114,15 @@ class SectionMenuKeyboardTest(unittest.TestCase):
     def test_expense_section_menu_uses_requested_rows(self):
         keyboard = section_menu_kb("expense")
 
-        self.assertEqual([[button.text for button in row] for row in keyboard.keyboard], [
-            ["➖ Добавить расход"],
-            ["🔁 Регулярные платежи"],
-            ["📊 Отчёт", "📂 Категории"],
-            [BACK_TEXT],
-        ])
+        self.assertEqual(
+            [[button.text for button in row] for row in keyboard.keyboard],
+            [
+                ["➖ Добавить расход"],
+                ["🔁 Регулярные платежи"],
+                ["📊 Отчёт", "📂 Категории"],
+                [BACK_TEXT],
+            ],
+        )
 
 
 class ReportKeyboardTest(unittest.TestCase):
@@ -127,7 +142,9 @@ class ReportKeyboardTest(unittest.TestCase):
 
         self.assertEqual(len(keyboard.inline_keyboard), 1)
         self.assertEqual(keyboard.inline_keyboard[0][0].text, "✏️ Редактировать")
-        self.assertEqual(keyboard.inline_keyboard[0][0].callback_data, "report_edit_recent:expense")
+        self.assertEqual(
+            keyboard.inline_keyboard[0][0].callback_data, "report_edit_recent:expense"
+        )
 
     def test_report_transactions_keyboard_can_hide_edit_button(self):
         keyboard = report_transactions_kb(
@@ -153,13 +170,21 @@ class ReportKeyboardTest(unittest.TestCase):
         keyboard = report_transactions_kb([], scope="all", month_offset=-1)
 
         self.assertEqual(keyboard.inline_keyboard[0][0].text, "⬅️ Прошлый месяц")
-        self.assertEqual(keyboard.inline_keyboard[0][0].callback_data, "report_month:all:-2")
+        self.assertEqual(
+            keyboard.inline_keyboard[0][0].callback_data, "report_month:all:-2"
+        )
         self.assertEqual(keyboard.inline_keyboard[0][1].text, "Следующий месяц ➡️")
-        self.assertEqual(keyboard.inline_keyboard[0][1].callback_data, "report_month:all:0")
+        self.assertEqual(
+            keyboard.inline_keyboard[0][1].callback_data, "report_month:all:0"
+        )
         self.assertEqual(keyboard.inline_keyboard[1][0].text, "➕ Доход")
-        self.assertEqual(keyboard.inline_keyboard[1][0].callback_data, "report_filter:income:-1")
+        self.assertEqual(
+            keyboard.inline_keyboard[1][0].callback_data, "report_filter:income:-1"
+        )
         self.assertEqual(keyboard.inline_keyboard[1][1].text, "➖ Расход")
-        self.assertEqual(keyboard.inline_keyboard[1][1].callback_data, "report_filter:expense:-1")
+        self.assertEqual(
+            keyboard.inline_keyboard[1][1].callback_data, "report_filter:expense:-1"
+        )
         self.assertEqual(keyboard.inline_keyboard[2][0].text, "✏️ Редактировать")
         self.assertEqual(len(keyboard.inline_keyboard), 3)
 
@@ -168,33 +193,80 @@ class RecurringPaymentsKeyboardTest(unittest.TestCase):
     def test_recurring_day_choice_keyboard_is_compact_day_picker(self):
         keyboard = recurring_day_choice_kb()
 
-        self.assertEqual([[button.text for button in row] for row in keyboard.inline_keyboard[:5]], [
-            ["1", "2", "3", "4", "5", "6", "7"],
-            ["8", "9", "10", "11", "12", "13", "14"],
-            ["15", "16", "17", "18", "19", "20", "21"],
-            ["22", "23", "24", "25", "26", "27", "28"],
-            ["29", "30", "31"],
-        ])
+        self.assertEqual(
+            [[button.text for button in row] for row in keyboard.inline_keyboard[:5]],
+            [
+                ["1", "2", "3", "4", "5", "6", "7"],
+                ["8", "9", "10", "11", "12", "13", "14"],
+                ["15", "16", "17", "18", "19", "20", "21"],
+                ["22", "23", "24", "25", "26", "27", "28"],
+                ["29", "30", "31"],
+            ],
+        )
         self.assertEqual(keyboard.inline_keyboard[-1][0].text, CANCEL_TEXT)
-        self.assertEqual(keyboard.inline_keyboard[-1][0].callback_data, "cancel_recurring_day")
-        self.assertNotIn("⬅️ Пред.", [button.text for row in keyboard.inline_keyboard for button in row])
-        self.assertNotIn("След. ➡️", [button.text for row in keyboard.inline_keyboard for button in row])
+        self.assertEqual(
+            keyboard.inline_keyboard[-1][0].callback_data, "cancel_recurring_day"
+        )
+        self.assertNotIn(
+            "⬅️ Пред.",
+            [button.text for row in keyboard.inline_keyboard for button in row],
+        )
+        self.assertNotIn(
+            "След. ➡️",
+            [button.text for row in keyboard.inline_keyboard for button in row],
+        )
 
     def test_category_choice_keyboard_can_include_credit_card_placeholder(self):
         from aiogram.types import KeyboardButton
 
-        keyboard = category_choice_kb(["Кредит"], extra_rows=[[KeyboardButton(text="💳 Кредитная карта")]])
+        keyboard = category_choice_kb(
+            ["Кредит"], extra_rows=[[KeyboardButton(text="💳 Кредитная карта")]]
+        )
         button_rows = [[button.text for button in row] for row in keyboard.keyboard]
 
         self.assertIn(["💳 Кредитная карта"], button_rows)
         self.assertEqual(button_rows[-2], ["✏️ Новая категория"])
         self.assertEqual(button_rows[-1], [CANCEL_TEXT])
 
-    def test_recurring_payments_actions_contains_only_edit_buttons(self):
+    def test_recurring_payments_actions_contains_edit_buttons_by_default(self):
         keyboard = recurring_payments_actions_kb([{"id": 1, "title": "Сбер кредит"}])
-        button_texts = [button.text for row in keyboard.inline_keyboard for button in row]
+        button_texts = [
+            button.text for row in keyboard.inline_keyboard for button in row
+        ]
 
         self.assertEqual(button_texts, ["✏️ Редактировать: Сбер кредит"])
+
+    def test_recurring_payments_actions_can_include_advance_payment_button(self):
+        keyboard = recurring_payments_actions_kb(
+            [{"id": 1, "title": "Сбер кредит"}],
+            include_advance_payment=True,
+        )
+        rows = [[button.text for button in row] for row in keyboard.inline_keyboard]
+        callbacks = [
+            button.callback_data for row in keyboard.inline_keyboard for button in row
+        ]
+
+        self.assertEqual(rows[0], ["💸 Оплатить платёж заранее"])
+        self.assertIn("advance_recurring:list", callbacks)
+
+    def test_recurring_advance_payment_keyboard_uses_payment_date(self):
+        keyboard = recurring_advance_payments_kb(
+            [{"id": 1, "title": "Сбер", "payment_date": date(2026, 7, 16)}]
+        )
+        button = keyboard.inline_keyboard[0][0]
+
+        self.assertEqual(button.text, "16.07.2026 — Сбер")
+        self.assertEqual(button.callback_data, "advance_recurring:select:1:2026-07-16")
+
+    def test_recurring_advance_confirm_keyboard_contains_yes_and_no(self):
+        keyboard = recurring_advance_confirm_kb(1, date(2026, 7, 16))
+        buttons = keyboard.inline_keyboard[0]
+
+        self.assertEqual([button.text for button in buttons], ["Да", "Нет"])
+        self.assertEqual(
+            buttons[0].callback_data, "advance_recurring:confirm:1:2026-07-16"
+        )
+        self.assertEqual(buttons[1].callback_data, "advance_recurring:cancel")
 
     def test_recurring_due_keyboard_contains_only_paid_buttons(self):
         keyboard = recurring_due_kb([{"id": 1, "title": "Сбер"}])
@@ -205,14 +277,18 @@ class RecurringPaymentsKeyboardTest(unittest.TestCase):
         self.assertEqual(buttons[0].callback_data, "pay_recurring:1")
 
     def test_recurring_due_keyboard_includes_payment_date_when_available(self):
-        keyboard = recurring_due_kb([{"id": 1, "title": "Сбер", "payment_date": date(2026, 6, 16)}])
+        keyboard = recurring_due_kb(
+            [{"id": 1, "title": "Сбер", "payment_date": date(2026, 6, 16)}]
+        )
         buttons = [button for row in keyboard.inline_keyboard for button in row]
 
         self.assertEqual(buttons[0].callback_data, "pay_recurring:1:2026-06-16")
 
     def test_recurring_edit_menu_contains_delete_button(self):
         keyboard = recurring_edit_fields_kb(1)
-        callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
+        callbacks = [
+            button.callback_data for row in keyboard.inline_keyboard for button in row
+        ]
 
         self.assertIn("delete_recurring:1", callbacks)
 

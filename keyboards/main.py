@@ -1,7 +1,12 @@
 import calendar
 from datetime import date
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
 
 CANCEL_TEXT = "❌ Отмена"
 BACK_TEXT = "⬅️ Назад"
@@ -60,7 +65,9 @@ MONTH_NAMES = {
 WEEKDAY_NAMES = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 
 
-def _calendar_callback(prefix: str, action: str, year: int, month: int, day: int = 0) -> str:
+def _calendar_callback(
+    prefix: str, action: str, year: int, month: int, day: int = 0
+) -> str:
     return f"cal:{prefix}:{action}:{year}:{month}:{day}"
 
 
@@ -78,7 +85,11 @@ def calendar_kb(
     marked_days: set[int] | dict[int, str] | None = None,
 ) -> InlineKeyboardMarkup:
     marked_days = marked_days or set()
-    day_marks = marked_days if isinstance(marked_days, dict) else {day: "•" for day in marked_days}
+    day_marks = (
+        marked_days
+        if isinstance(marked_days, dict)
+        else {day: "•" for day in marked_days}
+    )
     today = date.today()
     previous_year, previous_month = (year - 1, 12) if month == 1 else (year, month - 1)
     next_year, next_month = (year + 1, 1) if month == 12 else (year, month + 1)
@@ -115,8 +126,14 @@ def calendar_kb(
 
             row.append(
                 InlineKeyboardButton(
-                    text=_format_calendar_day(day, day_marks.get(day), prefix != "events" and today == date(year, month, day)),
-                    callback_data=_calendar_callback(prefix, "select", year, month, day),
+                    text=_format_calendar_day(
+                        day,
+                        day_marks.get(day),
+                        prefix != "events" and today == date(year, month, day),
+                    ),
+                    callback_data=_calendar_callback(
+                        prefix, "select", year, month, day
+                    ),
                 )
             )
         if row:
@@ -126,11 +143,15 @@ def calendar_kb(
         [
             InlineKeyboardButton(
                 text="⬅️ Пред.",
-                callback_data=_calendar_callback(prefix, "month", previous_year, previous_month),
+                callback_data=_calendar_callback(
+                    prefix, "month", previous_year, previous_month
+                ),
             ),
             InlineKeyboardButton(
                 text="След. ➡️",
-                callback_data=_calendar_callback(prefix, "month", next_year, next_month),
+                callback_data=_calendar_callback(
+                    prefix, "month", next_year, next_month
+                ),
             ),
         ]
     )
@@ -146,7 +167,9 @@ def recurring_day_choice_kb() -> InlineKeyboardMarkup:
                 for day in range(start, min(start + 7, 32))
             ]
         )
-    rows.append([InlineKeyboardButton(text=CANCEL_TEXT, callback_data="cancel_recurring_day")])
+    rows.append(
+        [InlineKeyboardButton(text=CANCEL_TEXT, callback_data="cancel_recurring_day")]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -163,7 +186,9 @@ def main_menu_kb() -> ReplyKeyboardMarkup:
     )
 
 
-def dashboard_actions_kb(extra_rows: list[list[InlineKeyboardButton]] | None = None) -> InlineKeyboardMarkup:
+def dashboard_actions_kb(
+    extra_rows: list[list[InlineKeyboardButton]] | None = None,
+) -> InlineKeyboardMarkup:
     rows = [
         [
             InlineKeyboardButton(text="+", callback_data="quick_tx:income"),
@@ -194,8 +219,19 @@ def section_menu_kb(kind: str) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
 
-def recurring_payments_actions_kb(operations) -> InlineKeyboardMarkup | None:
+def recurring_payments_actions_kb(
+    operations, *, include_advance_payment: bool = False
+) -> InlineKeyboardMarkup | None:
     rows = []
+    if include_advance_payment:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="💸 Оплатить платёж заранее",
+                    callback_data="advance_recurring:list",
+                )
+            ]
+        )
     for operation in operations:
         operation_id = operation["id"]
         title = operation["title"]
@@ -216,18 +252,40 @@ def recurring_edit_fields_kb(operation_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="💰 Сумма", callback_data=f"edit_recurring_field:{operation_id}:amount"),
-                InlineKeyboardButton(text="📂 Категория", callback_data=f"edit_recurring_field:{operation_id}:category"),
+                InlineKeyboardButton(
+                    text="💰 Сумма",
+                    callback_data=f"edit_recurring_field:{operation_id}:amount",
+                ),
+                InlineKeyboardButton(
+                    text="📂 Категория",
+                    callback_data=f"edit_recurring_field:{operation_id}:category",
+                ),
             ],
             [
-                InlineKeyboardButton(text="📝 Название", callback_data=f"edit_recurring_field:{operation_id}:title"),
-                InlineKeyboardButton(text="📅 День", callback_data=f"edit_recurring_field:{operation_id}:day"),
+                InlineKeyboardButton(
+                    text="📝 Название",
+                    callback_data=f"edit_recurring_field:{operation_id}:title",
+                ),
+                InlineKeyboardButton(
+                    text="📅 День",
+                    callback_data=f"edit_recurring_field:{operation_id}:day",
+                ),
             ],
             [
-                InlineKeyboardButton(text="💬 Комментарий", callback_data=f"edit_recurring_field:{operation_id}:comment"),
-                InlineKeyboardButton(text="↔️ Тип", callback_data=f"edit_recurring_field:{operation_id}:type"),
+                InlineKeyboardButton(
+                    text="💬 Комментарий",
+                    callback_data=f"edit_recurring_field:{operation_id}:comment",
+                ),
+                InlineKeyboardButton(
+                    text="↔️ Тип",
+                    callback_data=f"edit_recurring_field:{operation_id}:type",
+                ),
             ],
-            [InlineKeyboardButton(text="🗑 Удалить", callback_data=f"delete_recurring:{operation_id}")],
+            [
+                InlineKeyboardButton(
+                    text="🗑 Удалить", callback_data=f"delete_recurring:{operation_id}"
+                )
+            ],
         ]
     )
 
@@ -236,10 +294,21 @@ def recurring_type_edit_kb(operation_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="➕ Доход", callback_data=f"edit_recurring_type:{operation_id}:income"),
-                InlineKeyboardButton(text="➖ Расход", callback_data=f"edit_recurring_type:{operation_id}:expense"),
+                InlineKeyboardButton(
+                    text="➕ Доход",
+                    callback_data=f"edit_recurring_type:{operation_id}:income",
+                ),
+                InlineKeyboardButton(
+                    text="➖ Расход",
+                    callback_data=f"edit_recurring_type:{operation_id}:expense",
+                ),
             ],
-            [InlineKeyboardButton(text="💳 Платёж", callback_data=f"edit_recurring_type:{operation_id}:payment")],
+            [
+                InlineKeyboardButton(
+                    text="💳 Платёж",
+                    callback_data=f"edit_recurring_type:{operation_id}:payment",
+                )
+            ],
         ]
     )
 
@@ -271,6 +340,7 @@ def recurring_payments_menu_kb(kind: str = "payment") -> ReplyKeyboardMarkup:
     else:
         rows = [
             [KeyboardButton(text="➕ Добавить платеж")],
+            [KeyboardButton(text="💸 Оплатить платёж заранее")],
             [KeyboardButton(text=BACK_TEXT)],
             [KeyboardButton(text="📊 Отчёт по расходам")],
         ]
@@ -280,10 +350,14 @@ def recurring_payments_menu_kb(kind: str = "payment") -> ReplyKeyboardMarkup:
 def with_cancel_kb(*rows: list[KeyboardButton]) -> ReplyKeyboardMarkup:
     keyboard_rows = [list(row) for row in rows]
     keyboard_rows.append([KeyboardButton(text=CANCEL_TEXT)])
-    return ReplyKeyboardMarkup(keyboard=keyboard_rows, resize_keyboard=True, one_time_keyboard=True)
+    return ReplyKeyboardMarkup(
+        keyboard=keyboard_rows, resize_keyboard=True, one_time_keyboard=True
+    )
 
 
-def with_back_kb(*rows: list[KeyboardButton], input_field_placeholder: str | None = None) -> ReplyKeyboardMarkup:
+def with_back_kb(
+    *rows: list[KeyboardButton], input_field_placeholder: str | None = None
+) -> ReplyKeyboardMarkup:
     keyboard_rows = [list(row) for row in rows]
     keyboard_rows.append([KeyboardButton(text=BACK_TEXT)])
     return ReplyKeyboardMarkup(
@@ -303,23 +377,38 @@ def skip_comment_back_kb() -> ReplyKeyboardMarkup:
 
 
 def date_choice_kb() -> ReplyKeyboardMarkup:
-    return with_cancel_kb([KeyboardButton(text="Сегодня")], [KeyboardButton(text="Ввести дату")])
+    return with_cancel_kb(
+        [KeyboardButton(text="Сегодня")], [KeyboardButton(text="Ввести дату")]
+    )
 
 
 def date_choice_back_kb() -> ReplyKeyboardMarkup:
-    return with_back_kb([KeyboardButton(text="Сегодня")], [KeyboardButton(text="Ввести дату")])
+    return with_back_kb(
+        [KeyboardButton(text="Сегодня")], [KeyboardButton(text="Ввести дату")]
+    )
 
 
 def recurring_type_kb() -> ReplyKeyboardMarkup:
     return with_cancel_kb(
-        [KeyboardButton(text="Доход"), KeyboardButton(text="Расход"), KeyboardButton(text="Платёж")]
+        [
+            KeyboardButton(text="Доход"),
+            KeyboardButton(text="Расход"),
+            KeyboardButton(text="Платёж"),
+        ]
     )
 
 
-def category_choice_kb(categories, extra_rows: list[list[KeyboardButton]] | None = None) -> ReplyKeyboardMarkup:
+def category_choice_kb(
+    categories, extra_rows: list[list[KeyboardButton]] | None = None
+) -> ReplyKeyboardMarkup:
     rows = []
     for index in range(0, len(categories), 2):
-        rows.append([KeyboardButton(text=category) for category in categories[index : index + 2]])
+        rows.append(
+            [
+                KeyboardButton(text=category)
+                for category in categories[index : index + 2]
+            ]
+        )
     if extra_rows:
         rows.extend(extra_rows)
     rows.append([KeyboardButton(text="✏️ Новая категория")])
@@ -329,14 +418,25 @@ def category_choice_kb(categories, extra_rows: list[list[KeyboardButton]] | None
 def category_choice_back_kb(categories) -> ReplyKeyboardMarkup:
     rows = []
     for index in range(0, len(categories), 2):
-        rows.append([KeyboardButton(text=category) for category in categories[index : index + 2]])
+        rows.append(
+            [
+                KeyboardButton(text=category)
+                for category in categories[index : index + 2]
+            ]
+        )
     rows.append([KeyboardButton(text="✏️ Новая категория")])
     return with_back_kb(*rows)
 
 
 def payment_done_kb(payment_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="✅ Оплачено", callback_data=f"pay_done:{payment_id}")]]
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Оплачено", callback_data=f"pay_done:{payment_id}"
+                )
+            ]
+        ]
     )
 
 
@@ -360,6 +460,41 @@ def recurring_due_kb(operations) -> InlineKeyboardMarkup | None:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def recurring_advance_payments_kb(operations) -> InlineKeyboardMarkup | None:
+    rows = []
+    for operation in operations:
+        payment_date = operation["payment_date"]
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{payment_date.strftime('%d.%m.%Y')} — {operation['title']}",
+                    callback_data=f"advance_recurring:select:{operation['id']}:{payment_date.isoformat()}",
+                )
+            ]
+        )
+    if not rows:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def recurring_advance_confirm_kb(
+    operation_id: int, payment_date: date
+) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Да",
+                    callback_data=f"advance_recurring:confirm:{operation_id}:{payment_date.isoformat()}",
+                ),
+                InlineKeyboardButton(
+                    text="Нет", callback_data="advance_recurring:cancel"
+                ),
+            ]
+        ]
+    )
+
+
 def cancel_kb() -> ReplyKeyboardMarkup:
     return with_cancel_kb()
 
@@ -378,19 +513,46 @@ def report_menu_kb() -> ReplyKeyboardMarkup:
     )
 
 
-def report_transactions_kb(transactions, scope: str = "all", include_edit_button: bool = True, month_offset: int | None = None) -> InlineKeyboardMarkup | None:
+def report_transactions_kb(
+    transactions,
+    scope: str = "all",
+    include_edit_button: bool = True,
+    month_offset: int | None = None,
+) -> InlineKeyboardMarkup | None:
     rows = []
     if month_offset is not None:
-        rows.append([
-            InlineKeyboardButton(text="⬅️ Прошлый месяц", callback_data=f"report_month:{scope}:{month_offset - 1}"),
-            InlineKeyboardButton(text="Следующий месяц ➡️", callback_data=f"report_month:{scope}:{month_offset + 1}"),
-        ])
-        rows.append([
-            InlineKeyboardButton(text="➕ Доход", callback_data=f"report_filter:income:{month_offset}"),
-            InlineKeyboardButton(text="➖ Расход", callback_data=f"report_filter:expense:{month_offset}"),
-        ])
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Прошлый месяц",
+                    callback_data=f"report_month:{scope}:{month_offset - 1}",
+                ),
+                InlineKeyboardButton(
+                    text="Следующий месяц ➡️",
+                    callback_data=f"report_month:{scope}:{month_offset + 1}",
+                ),
+            ]
+        )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="➕ Доход",
+                    callback_data=f"report_filter:income:{month_offset}",
+                ),
+                InlineKeyboardButton(
+                    text="➖ Расход",
+                    callback_data=f"report_filter:expense:{month_offset}",
+                ),
+            ]
+        )
     if include_edit_button:
-        rows.append([InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"report_edit_recent:{scope}")])
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="✏️ Редактировать", callback_data=f"report_edit_recent:{scope}"
+                )
+            ]
+        )
     if not include_edit_button:
         for row in transactions:
             sign = "+" if row["type"] == "income" else "-"
@@ -407,26 +569,42 @@ def report_transactions_kb(transactions, scope: str = "all", include_edit_button
                     )
                 ]
             )
-    edit_only = include_edit_button and month_offset is None and len(rows) == 1 and not transactions
+    edit_only = (
+        include_edit_button
+        and month_offset is None
+        and len(rows) == 1
+        and not transactions
+    )
     if not rows or edit_only:
         return None
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def report_delete_confirm_kb(transaction_id: int, include_edit: bool = False) -> InlineKeyboardMarkup:
+def report_delete_confirm_kb(
+    transaction_id: int, include_edit: bool = False
+) -> InlineKeyboardMarkup:
     rows = []
     if include_edit:
         rows.append(
             [
-                InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"edit_tx:{transaction_id}"),
-                InlineKeyboardButton(text="🗑 Удалить", callback_data=f"delete_tx:{transaction_id}"),
+                InlineKeyboardButton(
+                    text="✏️ Редактировать", callback_data=f"edit_tx:{transaction_id}"
+                ),
+                InlineKeyboardButton(
+                    text="🗑 Удалить", callback_data=f"delete_tx:{transaction_id}"
+                ),
             ]
         )
     else:
         rows.append(
             [
-                InlineKeyboardButton(text="Да, удалить", callback_data=f"confirm_delete_tx:{transaction_id}"),
-                InlineKeyboardButton(text="Отмена", callback_data=f"cancel_delete_tx:{transaction_id}"),
+                InlineKeyboardButton(
+                    text="Да, удалить",
+                    callback_data=f"confirm_delete_tx:{transaction_id}",
+                ),
+                InlineKeyboardButton(
+                    text="Отмена", callback_data=f"cancel_delete_tx:{transaction_id}"
+                ),
             ]
         )
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -436,14 +614,29 @@ def report_edit_fields_kb(transaction_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="💰 Сумма", callback_data=f"edit_tx_field:{transaction_id}:amount"),
-                InlineKeyboardButton(text="📂 Категория", callback_data=f"edit_tx_field:{transaction_id}:category"),
+                InlineKeyboardButton(
+                    text="💰 Сумма",
+                    callback_data=f"edit_tx_field:{transaction_id}:amount",
+                ),
+                InlineKeyboardButton(
+                    text="📂 Категория",
+                    callback_data=f"edit_tx_field:{transaction_id}:category",
+                ),
             ],
             [
-                InlineKeyboardButton(text="📅 Дата", callback_data=f"edit_tx_field:{transaction_id}:date"),
-                InlineKeyboardButton(text="💬 Комментарий", callback_data=f"edit_tx_field:{transaction_id}:comment"),
+                InlineKeyboardButton(
+                    text="📅 Дата", callback_data=f"edit_tx_field:{transaction_id}:date"
+                ),
+                InlineKeyboardButton(
+                    text="💬 Комментарий",
+                    callback_data=f"edit_tx_field:{transaction_id}:comment",
+                ),
             ],
-            [InlineKeyboardButton(text="↔️ Тип", callback_data=f"edit_tx_field:{transaction_id}:type")],
+            [
+                InlineKeyboardButton(
+                    text="↔️ Тип", callback_data=f"edit_tx_field:{transaction_id}:type"
+                )
+            ],
         ]
     )
 
@@ -452,8 +645,14 @@ def transaction_type_edit_kb(transaction_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="➕ Доход", callback_data=f"edit_tx_type:{transaction_id}:income"),
-                InlineKeyboardButton(text="➖ Расход", callback_data=f"edit_tx_type:{transaction_id}:expense"),
+                InlineKeyboardButton(
+                    text="➕ Доход",
+                    callback_data=f"edit_tx_type:{transaction_id}:income",
+                ),
+                InlineKeyboardButton(
+                    text="➖ Расход",
+                    callback_data=f"edit_tx_type:{transaction_id}:expense",
+                ),
             ]
         ]
     )
@@ -465,7 +664,13 @@ def report_categories_kb(categories, scope: str = "all") -> InlineKeyboardMarkup
 
     for category in categories:
         encoded = quote(category, safe="")
-        rows.append([InlineKeyboardButton(text=category, callback_data=f"report_cat:{scope}:{encoded}")])
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=category, callback_data=f"report_cat:{scope}:{encoded}"
+                )
+            ]
+        )
     if not rows:
         return None
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -473,7 +678,10 @@ def report_categories_kb(categories, scope: str = "all") -> InlineKeyboardMarkup
 
 def settings_menu_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="💱 Валюта по умолчанию")], [KeyboardButton(text=BACK_TEXT)]],
+        keyboard=[
+            [KeyboardButton(text="💱 Валюта по умолчанию")],
+            [KeyboardButton(text=BACK_TEXT)],
+        ],
         resize_keyboard=True,
     )
 
@@ -486,7 +694,11 @@ def currency_choice_kb(currencies: tuple[str, ...]) -> ReplyKeyboardMarkup:
 
 def persons_list_kb(persons) -> InlineKeyboardMarkup | None:
     rows = [
-        [InlineKeyboardButton(text=f"📁 {person['name']}", callback_data=f"person:open:{person['id']}")]
+        [
+            InlineKeyboardButton(
+                text=f"📁 {person['name']}", callback_data=f"person:open:{person['id']}"
+            )
+        ]
         for person in persons
     ]
     if not rows:
@@ -499,7 +711,10 @@ def person_menu_kb() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text="💰 Доходы"), KeyboardButton(text="💸 Расходы")],
             [KeyboardButton(text="📅 Календарь"), KeyboardButton(text="📊 Отчёт")],
-            [KeyboardButton(text="💼 Главный экран"), KeyboardButton(text="⚙️ Настройки")],
+            [
+                KeyboardButton(text="💼 Главный экран"),
+                KeyboardButton(text="⚙️ Настройки"),
+            ],
             [KeyboardButton(text=BACK_TEXT)],
         ],
         resize_keyboard=True,
