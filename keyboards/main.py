@@ -375,8 +375,13 @@ def report_menu_kb() -> ReplyKeyboardMarkup:
     )
 
 
-def report_transactions_kb(transactions, scope: str = "all", include_edit_button: bool = True) -> InlineKeyboardMarkup | None:
+def report_transactions_kb(transactions, scope: str = "all", include_edit_button: bool = True, month_offset: int | None = None) -> InlineKeyboardMarkup | None:
     rows = []
+    if month_offset is not None:
+        rows.append([
+            InlineKeyboardButton(text="⬅️ Прошлый месяц", callback_data=f"report_month:{scope}:{month_offset - 1}"),
+            InlineKeyboardButton(text="Следующий месяц ➡️", callback_data=f"report_month:{scope}:{month_offset + 1}"),
+        ])
     if include_edit_button:
         rows.append([InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"report_edit_recent:{scope}")])
     for row in transactions:
@@ -394,8 +399,12 @@ def report_transactions_kb(transactions, scope: str = "all", include_edit_button
                 )
             ]
         )
-    if not rows or (include_edit_button and len(rows) == 1):
+    edit_only = include_edit_button and month_offset is None and len(rows) == 1
+    nav_and_edit_only = include_edit_button and month_offset is not None and len(rows) == 2
+    if not rows or edit_only:
         return None
+    if nav_and_edit_only:
+        return InlineKeyboardMarkup(inline_keyboard=[rows[0]])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
