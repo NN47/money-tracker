@@ -3,86 +3,10 @@ from datetime import date
 
 from database import dict_cursor, get_connection
 from services.recurring_payments import moscow_today
-from services.reports import month_bounds, money_currency, _format_totals, _subtract_totals
+from services.reports import month_bounds, _format_totals, _subtract_totals
 from services.texts import PROGRESS_TEXTS
 
 MOTIVATION_EVERY = 3
-
-
-def ensure_progress_tables() -> None:
-    with get_connection() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS user_progress (
-                user_id BIGINT PRIMARY KEY,
-                last_entry_date DATE,
-                streak_days INTEGER NOT NULL DEFAULT 0
-            )
-            """
-        )
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS user_achievements (
-                user_id BIGINT NOT NULL,
-                achievement_key TEXT NOT NULL,
-                unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY(user_id, achievement_key)
-            )
-            """
-        )
-        cur.close()
-
-
-def record_accounting_day(user_id: int | None) -> int:
-    if user_id is None:
-        return 0
-    ensure_progress_tables()
-    today = moscow_today()
-    with get_connection() as conn:
-        cur = dict_cursor(conn)
-        cur.execute(
-            "SELECT last_entry_date, streak_days FROM user_progress WHERE user_id=%s FOR UPDATE",
-            (user_id,),
-        )
-        row = cur.fetchone()
-        if not row:
-            streak = 1
-            cur.execute(
-                "INSERT INTO user_progress(user_id,last_entry_date,streak_days) VALUES(%s,%s,%s)",
-                (user_id, today, streak),
-            )
-        elif row["last_entry_date"] == today:
-            streak = int(row["streak_days"] or 1)
-        elif row["last_entry_date"] and (today - row["last_entry_date"]).days == 1:
-            streak = int(row["streak_days"] or 0) + 1
-            cur.execute(
-                "UPDATE user_progress SET last_entry_date=%s, streak_days=%s WHERE user_id=%s",
-                (today, streak, user_id),
-            )
-        else:
-            streak = 1
-            cur.execute(
-                "UPDATE user_progress SET last_entry_date=%s, streak_days=%s WHERE user_id=%s",
-                (today, streak, user_id),
-            )
-        cur.close()
-    return streak
-
-
-def get_streak(user_id: int | None) -> int:
-    if user_id is None:
-        return 0
-    ensure_progress_tables()
-    today = moscow_today()
-    with get_connection() as conn:
-        cur = dict_cursor(conn)
-        cur.execute("SELECT last_entry_date, streak_days FROM user_progress WHERE user_id=%s", (user_id,))
-        row = cur.fetchone()
-        cur.close()
-    if not row or not row["last_entry_date"]:
-        return 0
-    return int(row["streak_days"] or 0) if (today - row["last_entry_date"]).days <= 1 else 0
 
 
 def month_summary(person_id: int | None = None):
@@ -132,7 +56,6 @@ def build_month_summary(person_id: int | None = None) -> str:
 def _unlock_once(user_id: int | None, key: str) -> bool:
     if user_id is None:
         return False
-    ensure_progress_tables()
     with get_connection() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -154,16 +77,13 @@ def total_operations() -> int:
 
 
 def progress_after_operation(user_id: int | None, person_id: int | None = None) -> str:
-    streak = record_accounting_day(user_id)
     _income, _expense, _balance, month_count = month_summary(person_id)
     total_count = total_operations()
     t = PROGRESS_TEXTS
-    lines = [build_month_summary(person_id), "", t["streak"].format(days=streak)]
+    lines = [build_month_summary(person_id)]
     achievements = []
     achievement_rules = [
         ("first_operation", total_count >= 1),
-        ("streak_7", streak >= 7),
-        ("streak_30", streak >= 30),
         ("100_operations", total_count >= 100),
     ]
     for key, condition in achievement_rules:
@@ -175,8 +95,6 @@ def progress_after_operation(user_id: int | None, person_id: int | None = None) 
         lines.extend(["", t["motivation_operations"].format(count=month_count)])
     elif total_count % 5 == 0:
         lines.extend(["", t["motivation_accuracy"]])
-    elif streak > 1 and streak % 2 == 0:
-        lines.extend(["", t["motivation_updated"]])
     return "\n".join(lines)
 
 
@@ -266,25 +184,3 @@ def days_until_next_payment_text() -> str:
     if days <= 1:
         return "завтра"
     return f"через {days} {_days_word(days)}"
-
-
-def build_financial_order_block(user_id: int | None, person_id: int | None = None) -> str:
-    t = PROGRESS_TEXTS
-    _income, _expense, _balance, month_count = month_summary(person_id)
-    payment = fetch_next_payment()
-    lines = [t["progress_title"], t["progress_streak"].format(days=get_streak(user_id))]
-    if month_count:
-        lines.append(t["progress_month_operations"].format(count=month_count))
-    else:
-        lines.append(t["progress_no_month_operations"])
-    if payment:
-        lines.append(
-            t["progress_next_payment"].format(
-                date=payment["payment_date"].strftime("%d.%m.%Y"),
-                title=payment["title"],
-                amount=money_currency(float(payment["amount"])),
-            )
-        )
-    else:
-        lines.append(t["progress_no_payments"])
-    return "\n".join(lines)
