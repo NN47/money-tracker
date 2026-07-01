@@ -15,14 +15,12 @@ def moscow_today() -> date:
 def fetch_all_active_recurring_operations():
     with get_connection() as conn:
         cur = dict_cursor(conn)
-        cur.execute(
-            """
+        cur.execute("""
             SELECT id, title, type, amount, category, day_of_month, frequency, comment
             FROM recurring_operations
             WHERE is_active = TRUE
             ORDER BY day_of_month NULLS LAST, id
-            """
-        )
+            """)
         rows = cur.fetchall()
         cur.close()
     return rows
@@ -68,7 +66,15 @@ def update_recurring_operation(
             WHERE id = %s
               AND is_active = TRUE
             """,
-            (title, op_type, amount, category, day_of_month, comment, recurring_operation_id),
+            (
+                title,
+                op_type,
+                amount,
+                category,
+                day_of_month,
+                comment,
+                recurring_operation_id,
+            ),
         )
         updated = cur.rowcount > 0
         cur.close()
@@ -176,6 +182,43 @@ def fetch_unpaid_due_recurring_payments(payment_date: date | None = None):
     return rows
 
 
+def fetch_future_recurring_payments(payment_date: date | None = None, limit: int = 12):
+    """Return the next unpaid recurring payments after the selected date."""
+    today = payment_date or moscow_today()
+    with get_connection() as conn:
+        cur = dict_cursor(conn)
+        cur.execute(
+            """
+            SELECT
+                ro.id,
+                ro.title,
+                ro.type,
+                ro.amount,
+                ro.category,
+                ro.day_of_month,
+                due.payment_date
+            FROM recurring_operations ro
+            JOIN LATERAL (
+                SELECT generated_day::date AS payment_date
+                FROM generate_series(%s::date + interval '1 day', %s::date + interval '1 year', interval '1 day') AS generated_day
+                WHERE EXTRACT(DAY FROM generated_day)::int = ro.day_of_month
+            ) due ON TRUE
+            LEFT JOIN recurring_payments_log l
+                ON l.recurring_operation_id = ro.id
+               AND l.payment_date = due.payment_date
+            WHERE ro.is_active = TRUE
+              AND ro.type IN ('payment', 'expense')
+              AND l.id IS NULL
+            ORDER BY due.payment_date, ro.id
+            LIMIT %s
+            """,
+            (today, today, limit),
+        )
+        rows = cur.fetchall()
+        cur.close()
+    return rows
+
+
 def mark_scheduled_payment_paid(payment_id: int) -> dict:
     today = moscow_today()
     with get_connection() as conn:
@@ -210,7 +253,9 @@ def mark_scheduled_payment_paid(payment_id: int) -> dict:
     return {"status": "paid", "title": payment["title"]}
 
 
-def mark_recurring_payment_paid(recurring_operation_id: int, payment_date: date | None = None) -> dict:
+def mark_recurring_payment_paid(
+    recurring_operation_id: int, payment_date: date | None = None
+) -> dict:
     today = moscow_today()
     requested_payment_date = payment_date
     with get_connection() as conn:
@@ -253,7 +298,12 @@ def mark_recurring_payment_paid(recurring_operation_id: int, payment_date: date 
                 ORDER BY due.payment_date
                 LIMIT 1
                 """,
-                (recurring_operation_id, today, recurring_operation_id, recurring_operation_id),
+                (
+                    recurring_operation_id,
+                    today,
+                    recurring_operation_id,
+                    recurring_operation_id,
+                ),
             )
             due_row = cur.fetchone()
             if due_row:
