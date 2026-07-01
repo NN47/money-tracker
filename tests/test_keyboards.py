@@ -110,7 +110,7 @@ class SectionMenuKeyboardTest(unittest.TestCase):
 
 
 class ReportKeyboardTest(unittest.TestCase):
-    def test_report_transactions_keyboard_starts_with_edit_button_for_scope(self):
+    def test_report_transactions_keyboard_shows_only_edit_button_for_scope(self):
         keyboard = report_transactions_kb(
             [
                 {
@@ -124,9 +124,9 @@ class ReportKeyboardTest(unittest.TestCase):
             scope="expense",
         )
 
+        self.assertEqual(len(keyboard.inline_keyboard), 1)
         self.assertEqual(keyboard.inline_keyboard[0][0].text, "✏️ Редактировать")
         self.assertEqual(keyboard.inline_keyboard[0][0].callback_data, "report_edit_recent:expense")
-        self.assertEqual(keyboard.inline_keyboard[1][0].callback_data, "report_tx:7")
 
     def test_report_transactions_keyboard_can_hide_edit_button(self):
         keyboard = report_transactions_kb(
@@ -155,7 +155,12 @@ class ReportKeyboardTest(unittest.TestCase):
         self.assertEqual(keyboard.inline_keyboard[0][0].callback_data, "report_month:all:-2")
         self.assertEqual(keyboard.inline_keyboard[0][1].text, "Следующий месяц ➡️")
         self.assertEqual(keyboard.inline_keyboard[0][1].callback_data, "report_month:all:0")
-        self.assertEqual(len(keyboard.inline_keyboard), 1)
+        self.assertEqual(keyboard.inline_keyboard[1][0].text, "➕ Доход")
+        self.assertEqual(keyboard.inline_keyboard[1][0].callback_data, "report_filter:income:-1")
+        self.assertEqual(keyboard.inline_keyboard[1][1].text, "➖ Расход")
+        self.assertEqual(keyboard.inline_keyboard[1][1].callback_data, "report_filter:expense:-1")
+        self.assertEqual(keyboard.inline_keyboard[2][0].text, "✏️ Редактировать")
+        self.assertEqual(len(keyboard.inline_keyboard), 3)
 
 
 class RecurringPaymentsKeyboardTest(unittest.TestCase):
