@@ -314,20 +314,12 @@ def build_summary_report(transactions=None, tx_type: str | None = None, person_i
     else:
         lines.append("Операций пока нет")
     if tx_type != "income":
-        lines.append("")
         overdue = [] if person_id is not None else sorted([*overdue_payments, *overdue_recurring], key=lambda row: (row["payment_date"], row["id"]))[:10]
         if overdue:
+            lines.append("")
             lines.append("<b>⚠️ Просроченные платежи:</b>")
             for r in overdue:
                 lines.append(_format_payment_line(r, include_year=True))
-            lines.append("")
-        lines.append(f"<b>📅 Ближайшие платежи на {UPCOMING_PAYMENTS_DAYS} дней:</b>")
-        upcoming_payments = [] if person_id is not None else sorted([*payments, *recurring], key=lambda row: (row["payment_date"], row["id"]))[:10]
-        if upcoming_payments:
-            for r in upcoming_payments:
-                lines.append(_format_payment_line(r))
-        else:
-            lines.append("Нет платежей")
     return "\n".join(lines)
 
 
