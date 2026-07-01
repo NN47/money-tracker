@@ -19,6 +19,7 @@ MAIN_MENU_TEXTS = {
     "🔁 Регулярные платежи",
     "➕ Добавить регулярный доход",
     "➕ Добавить платеж",
+    "💳 Кредитная карта",
     "📅 Календарь",
     "📊 Отчёт",
     "📊 Отчёт по доходам",
@@ -315,10 +316,12 @@ def recurring_type_kb() -> ReplyKeyboardMarkup:
     )
 
 
-def category_choice_kb(categories) -> ReplyKeyboardMarkup:
+def category_choice_kb(categories, extra_rows: list[list[KeyboardButton]] | None = None) -> ReplyKeyboardMarkup:
     rows = []
     for index in range(0, len(categories), 2):
         rows.append([KeyboardButton(text=category) for category in categories[index : index + 2]])
+    if extra_rows:
+        rows.extend(extra_rows)
     rows.append([KeyboardButton(text="✏️ Новая категория")])
     return with_cancel_kb(*rows)
 

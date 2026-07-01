@@ -6,7 +6,7 @@ from aiogram import Bot, F, Router
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, KeyboardButton, Message
 
 from database import dict_cursor, get_connection
 from keyboards.main import (
@@ -54,6 +54,8 @@ from handlers.home import dashboard_due_action_rows, fetch_unpaid_due_scheduled_
 
 router = Router()
 logger = logging.getLogger(__name__)
+
+CREDIT_CARD_EXPENSE_TEXT = "💳 Кредитная карта"
 
 OWNER_TELEGRAM_ID: int | None = None
 
@@ -918,12 +920,16 @@ async def _ask_recurring_category(message: Message, state: FSMContext, prompt: s
     data = await state.get_data()
     category_type = "income" if data.get("type") == "income" else "expense"
     categories = [row["category"] for row in fetch_categories(tx_type=category_type)]
-    await message.answer(prompt, reply_markup=category_choice_kb(categories))
+    extra_rows = [[KeyboardButton(text=CREDIT_CARD_EXPENSE_TEXT)]] if category_type == "expense" else None
+    await message.answer(prompt, reply_markup=category_choice_kb(categories, extra_rows=extra_rows))
 
 
 @router.message(RecurringStates.waiting_category)
 async def recurring_category(message: Message, state: FSMContext):
     category = message.text.strip()
+    if category == CREDIT_CARD_EXPENSE_TEXT:
+        await message.answer("Раздел расходов по кредитной карте пока в разработке. Выберите другую категорию или введите новую.")
+        return
     if category == "✏️ Новая категория":
         await message.answer("Введите новую категорию:", reply_markup=cancel_kb())
         return

@@ -10,6 +10,7 @@ from keyboards.main import (
     calendar_back_kb,
     calendar_kb,
     recurring_day_choice_kb,
+    category_choice_kb,
     recurring_due_kb,
     recurring_edit_fields_kb,
     recurring_payments_actions_kb,
@@ -178,6 +179,16 @@ class RecurringPaymentsKeyboardTest(unittest.TestCase):
         self.assertEqual(keyboard.inline_keyboard[-1][0].callback_data, "cancel_recurring_day")
         self.assertNotIn("⬅️ Пред.", [button.text for row in keyboard.inline_keyboard for button in row])
         self.assertNotIn("След. ➡️", [button.text for row in keyboard.inline_keyboard for button in row])
+
+    def test_category_choice_keyboard_can_include_credit_card_placeholder(self):
+        from aiogram.types import KeyboardButton
+
+        keyboard = category_choice_kb(["Кредит"], extra_rows=[[KeyboardButton(text="💳 Кредитная карта")]])
+        button_rows = [[button.text for button in row] for row in keyboard.keyboard]
+
+        self.assertIn(["💳 Кредитная карта"], button_rows)
+        self.assertEqual(button_rows[-2], ["✏️ Новая категория"])
+        self.assertEqual(button_rows[-1], [CANCEL_TEXT])
 
     def test_recurring_payments_actions_contains_only_edit_buttons(self):
         keyboard = recurring_payments_actions_kb([{"id": 1, "title": "Сбер кредит"}])
